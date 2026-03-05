@@ -1,0 +1,15 @@
+# Java / Maven
+target/
+*.class
+*.jar
+
+# Flutter / Dart
+.dart_tool/
+build/
+.packages
+.pub-cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
