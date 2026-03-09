@@ -13,7 +13,7 @@ El proyecto destaca por aplicar una arquitectura limpia y escalable, enfocada en
 ## 🚀 Stack Tecnológico
 
 ### Backend
-* **Lenguaje:** Java 21 (LTS)
+* **Lenguaje:** Java 21 
 * **Framework:** Spring Boot 3+
 * **Persistencia:** Spring Data JPA (Hibernate)
 * **Seguridad:** Spring Security & JWT
@@ -22,7 +22,6 @@ El proyecto destaca por aplicar una arquitectura limpia y escalable, enfocada en
 ### Frontend
 * **Framework:** Flutter (Dart)
 * **Arquitectura:** Clean Architecture
-* **Gestión de Estado:** Provider / Bloc
 
 ### Infraestructura y Datos
 * **Base de Datos:** MySQL / SQL Server
@@ -52,6 +51,6 @@ El proyecto destaca por aplicar una arquitectura limpia y escalable, enfocada en
 ```text
 /
 ├── backend/          # API REST con Spring Boot y Java 21
-├── mobile_app/       # Aplicación móvil en Flutter
+├── app/       # Aplicación móvil en Flutter
 ├── docs/             # Documentación técnica, diagramas y memoria
 └── README.md         # Presentación del proyecto
