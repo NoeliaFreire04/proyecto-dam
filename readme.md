@@ -1,56 +1,60 @@
 # CookShare 🍳
 
-> **Plataforma Integral de Gestión Gastronómica y Compra Inteligente.**
+> **Ecosistema Multiplataforma para la Gestión de Recetas y Compra Inteligente.**
 > Proyecto de Fin de Ciclo - Desarrollo de Aplicaciones Multiplataforma (DAM).
 
 ---
 
 ## 📝 Descripción del Proyecto
-**CookShare** no es solo un recetario digital; es una solución completa para el ciclo de alimentación. La plataforma permite a los usuarios descubrir, gestionar y adaptar recetas de cocina profesional, integrando un sistema de **cálculo dinámico de raciones** y una **lista de la compra automatizada**. 
+**CookShare** es una solución integral diseñada para optimizar el ciclo de alimentación doméstica. La plataforma permite a los usuarios descubrir, gestionar y adaptar recetas, integrando un sistema de **cálculo dinámico de raciones** y una **lista de la compra automatizada** sincronizada con un inventario básico.
 
-El proyecto destaca por aplicar una arquitectura limpia y escalable, enfocada en la experiencia de usuario y la integridad de los datos.
+El proyecto destaca por la implementación de **Inteligencia Artificial** para facilitar la entrada de datos y una arquitectura limpia que garantiza la escalabilidad y seguridad de la información.
 
 ## 🚀 Stack Tecnológico
 
 ### Backend
-* **Lenguaje:** Java 21 
-* **Framework:** Spring Boot 3+
-* **Persistencia:** Spring Data JPA (Hibernate)
-* **Seguridad:** Spring Security & JWT
-* **Documentación:** Swagger / OpenAPI 3
+* [cite_start]**Lenguaje:** Java 21 (LTS) [cite: 99]
+* [cite_start]**Framework:** Spring Boot 3+ [cite: 99]
+* [cite_start]**Persistencia:** Spring Data JPA (Hibernate) [cite: 100]
+* [cite_start]**Seguridad:** Spring Security & JWT [cite: 100]
+* [cite_start]**Documentación:** Swagger / OpenAPI 3 [cite: 110]
 
 ### Frontend
-* **Framework:** Flutter (Dart)
-* **Arquitectura:** Clean Architecture
+* [cite_start]**Framework:** Flutter (Dart) [cite: 97]
+* **Arquitectura:** Clean Architecture (Pattern por capas)
 
-### Infraestructura y Datos
-* **Base de Datos:** MySQL / SQL Server
+### Infraestructura e Innovación
+* [cite_start]**Base de Datos:** MySQL [cite: 102]
+* **IA:** Google Gemini API (Procesamiento de vídeo y extracción de lenguaje natural)
 * **Control de Versiones:** Git (GitHub)
 
 ---
 
 ## ✨ Funcionalidades Principales
 
-### 👨‍🍳 Gestión de Recetas
-* **Recetario Dinámico:** CRUD completo de recetas con soporte multimedia.
-* **Algoritmo de Escalado:** Recálculo automático de cantidades de ingredientes basado en el número de comensales.
-* **Privacidad:** Control granular sobre recetas públicas o privadas.
+### 👨‍🍳 Gestión de Recetas e IA
+* **Video-to-Recipe (IA):** Extracción automática de ingredientes y pasos de elaboración a partir de archivos de vídeo mediante IA generativa.
+* [cite_start]**Recetario Dinámico:** CRUD completo de recetas con soporte multimedia[cite: 89].
+* [cite_start]**Algoritmo de Escalado:** Recálculo automático de cantidades basado en el número de comensales seleccionado[cite: 90].
+* **Privacidad:** Control sobre recetas públicas (compartidas con la comunidad) o privadas.
 
-### 🛒 Lista de la Compra Inteligente
-* **Sincronización:** Añadir ingredientes directamente desde una receta.
-* **Inventario:** Gestión de artículos manuales y control de productos adquiridos.
+### 🛒 Compra Inteligente e Inventario
+* [cite_start]**Lista de la Compra Automatizada:** Generación de listas a partir de los ingredientes de las recetas seleccionadas[cite: 91].
+* [cite_start]**Gestión de Inventario:** Control de artículos manuales y marcado de productos adquiridos[cite: 91].
 
 ### 👥 Componente Social
-* **Feed Global:** Exploración de recetas compartidas por la comunidad.
-* **Sistema de Favoritos:** Zona personalizada de recetas guardadas.
-* **Perfiles de Usuario:** Gestión de perfiles y autoría de contenido.
+* **Feed Global:** Exploración de recetas compartidas por otros usuarios.
+* **Sistema de Favoritos:** Guardado de recetas de terceros en una zona personalizada.
+* **Perfiles de Usuario:** Gestión de identidad, perfiles y autoría de contenido.
 
 ---
 
 ## 🏗️ Estructura del Repositorio
+
 ```text
 /
-├── backend/          # API REST con Spring Boot y Java 21
-├── app/       # Aplicación móvil en Flutter
-├── docs/             # Documentación técnica, diagramas y memoria
-└── README.md         # Presentación del proyecto
+├── backend/      # API REST con Spring Boot y Java 21
+├── app/          # Aplicación móvil desarrollada en Flutter
+├── database/     # Scripts SQL y modelo Entidad-Relación
+[cite_start]├── docs/         # Memoria final (PDF) y documentación técnica [cite: 95]
+└── README.md     # Presentación del proyecto
