@@ -9,6 +9,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 /**
  * Entidad intermedia que representa la relación Many-to-Many
  * entre Recipe e Ingredient.
@@ -54,7 +56,7 @@ public class RecipeIngredient {
     @NotNull
     @Positive
     @Column(nullable = false, precision = 8, scale = 2)
-    private Double quantity;
+    private BigDecimal quantity;
 
     /**
      * Unidad de medida del ingrediente (g, kg, ml, l, uds, cdta...).
