@@ -18,8 +18,10 @@ class RegisterForm extends StatelessWidget {
       children: [
         TextFormField(
           controller: usernameController,
+          style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             labelText: 'Nombre de usuario',
+            labelStyle: const TextStyle(color: Color(0xFFB0BEC5)),
           ),
           validator: (value) {
             if (value == null || value.isEmpty) {
@@ -30,8 +32,10 @@ class RegisterForm extends StatelessWidget {
         ),
         TextFormField(
           controller: emailController,
+          style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             labelText: 'Correo electrónico',
+            labelStyle: const TextStyle(color: Color(0xFFB0BEC5)),
           ),
           validator: (value) {
             if (value == null || value.isEmpty) {
@@ -43,8 +47,10 @@ class RegisterForm extends StatelessWidget {
         TextFormField(
           controller: passwordController,
           obscureText: true,
+          style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             labelText: 'Contraseña',
+            labelStyle: const TextStyle(color: Color(0xFFB0BEC5)),
           ),
           validator: (value) {
             if (value == null || value.isEmpty) {

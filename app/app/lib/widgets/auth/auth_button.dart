@@ -21,8 +21,12 @@ class AuthButton extends StatelessWidget {
     return Column(
       children: [
         ElevatedButton(
-          onPressed: isLoading ? null : onPressed, 
-          child: isLoading ? CircularProgressIndicator() : Text(isLogin ? 'Iniciar sesión' : 'Registrarse')
+          onPressed: isLoading ? null : onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFE8C55A),
+            foregroundColor: Colors.white,
+          ),
+          child: isLoading ? CircularProgressIndicator() : Text(isLogin ? 'Iniciar sesión' : 'Registrarse'),
         ),
         SizedBox(height: 12,),
         RichText(
@@ -36,7 +40,6 @@ class AuthButton extends StatelessWidget {
                     color: Color(0xFFE8C55A),
                     fontWeight: FontWeight.bold,
                   ),
-                  //Permite que el texto de 'Registrate' sea clickable
                   recognizer: TapGestureRecognizer()..onTap = onToggle,
                 ),
               ],
