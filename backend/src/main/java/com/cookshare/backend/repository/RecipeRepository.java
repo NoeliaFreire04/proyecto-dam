@@ -27,4 +27,6 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
      * @return lista de recetas del usuario
      */
     List<Recipe> findByUserId(Long userId);
+
+    List<Recipe> findByAuthorUsername(String username);
 }

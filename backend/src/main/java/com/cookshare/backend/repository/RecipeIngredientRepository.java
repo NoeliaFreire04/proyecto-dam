@@ -15,4 +15,6 @@ public interface RecipeIngredientRepository extends JpaRepository<RecipeIngredie
      *@param recipeId Id de la receta sobre la que se quiere filtrar
      * @return Lista de ingredientes de una receta*/
     List<RecipeIngredient> findByRecipeId(Long recipeId);
+
+    void deleteByRecipeId(Long recipeId);
 }
