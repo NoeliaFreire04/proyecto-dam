@@ -23,4 +23,6 @@ public interface UserRepository extends JpaRepository<User,Long> {
      * @param username filtro de usuarios
      * @return boolean según existencia*/
     Boolean existsByUsername(String username);
+
+    Optional<User> findByUsername(String username);
 }

@@ -4,6 +4,8 @@ import com.cookshare.backend.entity.Favorite;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 /**
  * Repositorio JPA para la entidad Favorite.
  */
@@ -19,4 +21,6 @@ public interface FavoriteRepository extends JpaRepository<Favorite,Long> {
      *@param userId Id del usuario con la receta guardada
      *@return boolean según su existencia*/
     boolean existsByRecipeIdAndUserId(Long recipeId, Long userId);
+
+    List<Favorite> findByUserId(Long id);
 }

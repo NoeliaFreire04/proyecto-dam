@@ -3,6 +3,7 @@ package com.cookshare.backend.repository;
 import com.cookshare.backend.entity.RecipeIngredient;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -16,5 +17,7 @@ public interface RecipeIngredientRepository extends JpaRepository<RecipeIngredie
      * @return Lista de ingredientes de una receta*/
     List<RecipeIngredient> findByRecipeId(Long recipeId);
 
+    /** Elimina todos los ingredientes de una receta. */
+    @Transactional
     void deleteByRecipeId(Long recipeId);
 }

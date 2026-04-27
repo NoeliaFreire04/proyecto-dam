@@ -98,7 +98,7 @@ public class RecipeService {
     /**
      * Convierte una entidad Recipe a DTO para no exponer entidades JPA en las respuestas.
      */
-    private RecipeDTO toDTO(Recipe recipe){
+    public RecipeDTO toDTO(Recipe recipe){
         // Mapear cada RecipeIngredient a su DTO
         List<RecipeIngredientDTO> ingredientDTOs = new ArrayList<>();
         for (RecipeIngredient ri : recipe.getRecipeIngredients()) {

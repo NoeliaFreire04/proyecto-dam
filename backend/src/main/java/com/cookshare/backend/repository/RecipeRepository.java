@@ -1,6 +1,7 @@
 package com.cookshare.backend.repository;
 
 import com.cookshare.backend.entity.Recipe;
+import com.cookshare.backend.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -29,4 +30,8 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
     List<Recipe> findByUserId(Long userId);
 
     List<Recipe> findByAuthorUsername(String username);
+
+    /** Recetas de un autor concreto. */
+    List<Recipe> findByAuthor(User author);
+
 }
