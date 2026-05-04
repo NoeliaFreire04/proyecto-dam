@@ -231,7 +231,7 @@ public class RecipeService {
      * Devuelve todas las recetas de un usuario (públicas y privadas).
      */
     public List<RecipeDTO> findByUser(String username) {
-        List<Recipe> recipes = recipeRepository.findByAuthorUsername(username);
+        List<Recipe> recipes = recipeRepository.findByUserUsername(username);
         List<RecipeDTO> dtos = new ArrayList<>();
         for (Recipe recipe : recipes) {
             dtos.add(toDTO(recipe));
