@@ -46,7 +46,7 @@ class AuthService{
       return SessionModel.fromJson(jsonDecode(response.body));
     } else {
       //Si la petición no fue exitosa se lanza una excepción
-      throw Exception('Error al registrarse');
+      throw Exception('Error al iniciar sesión');
     }
   }
 }

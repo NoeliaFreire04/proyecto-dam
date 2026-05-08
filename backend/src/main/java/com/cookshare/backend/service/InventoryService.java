@@ -77,9 +77,14 @@ public class InventoryService {
         inventoryItemRepository.delete(item);
     }
 
-    // Busca el usuario por username o lanza excepción
-    private User findUser(String username) {
-        Optional<User> optionalUser = userRepository.findByUsername(username);
+    /**
+     * Busca el usuario por email (lo que el filtro JWT pone como principal).
+     *
+     * @param email email del usuario autenticado
+     * @return entidad User correspondiente
+     */
+    private User findUser(String email) {
+        Optional<User> optionalUser = userRepository.findByEmail(email);
         if (optionalUser.isEmpty()) {
             throw new RuntimeException("Usuario no encontrado");
         }

@@ -37,6 +37,18 @@ public class InventoryItem {
     private User user;
 
     /**
+     * Referencia al ingrediente del catálogo global que corresponde
+     * a este ítem del inventario. Permite comparar el inventario con
+     * los ingredientes de las recetas de forma estructurada, sin
+     * depender de comparaciones de texto.
+     * Es opcional: si el usuario añade un producto que no existe en el
+     * catálogo, el campo queda nulo y se usa itemName como fallback.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ingredient_id")
+    private Ingredient ingredient;
+
+    /**
      * Nombre del producto en el inventario.
      * Se normaliza a minúsculas para facilitar la comparación
      * con los ingredientes de las recetas al generar la lista de la compra.

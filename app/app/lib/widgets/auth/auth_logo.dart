@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+//logo y nombre de la app para mostrar en la pantalla de autenticación
 class AuthLogo extends StatelessWidget {
   const AuthLogo({super.key});
 
@@ -7,6 +8,7 @@ class AuthLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        //imagen del logo cargada desde assets
         Image.asset(
           'assets/images/logo.png',
           height: 100,
@@ -22,7 +24,7 @@ class AuthLogo extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         const Text(
-          'Tu recetario inteligente',
+          'Comparte lo que cocinas',
           style: TextStyle(
             color: Color(0xFF7A8FA3),
             fontSize: 12,

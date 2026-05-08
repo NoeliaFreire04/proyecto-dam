@@ -37,9 +37,9 @@ public class UserController {
     @PutMapping("/profile")
     public ResponseEntity<User> updateProfile(@RequestBody User updates,
                                               Authentication authentication) {
-        String username = authentication.getName();
+        String email = authentication.getName();
 
-        Optional<User> optionalUser = userRepository.findByUsername(username);
+        Optional<User> optionalUser = userRepository.findByEmail(email);
         if (optionalUser.isEmpty()) {
             throw new RuntimeException("Usuario no encontrado");
         }

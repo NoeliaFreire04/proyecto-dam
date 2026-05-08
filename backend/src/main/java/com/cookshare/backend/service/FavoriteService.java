@@ -52,7 +52,7 @@ public class FavoriteService {
      * @param username nombre del usuario autenticado
      */
     public void addFavorite(Long recipeId, String username) {
-        Optional<User> optionalUser = userRepository.findByUsername(username);
+        Optional<User> optionalUser = userRepository.findByEmail(username);
         if (optionalUser.isEmpty()) {
             throw new RuntimeException("Usuario no encontrado");
         }
@@ -84,7 +84,7 @@ public class FavoriteService {
      */
     @Transactional
     public void removeFavorite(Long recipeId, String username) {
-        Optional<User> optionalUser = userRepository.findByUsername(username);
+        Optional<User> optionalUser = userRepository.findByEmail(username);
         if (optionalUser.isEmpty()) {
             throw new RuntimeException("Usuario no encontrado");
         }
@@ -100,7 +100,7 @@ public class FavoriteService {
      * @return lista de RecipeDTO de sus favoritos
      */
     public List<RecipeDTO> getFavorites(String username) {
-        Optional<User> optionalUser = userRepository.findByUsername(username);
+        Optional<User> optionalUser = userRepository.findByEmail(username);
         if (optionalUser.isEmpty()) {
             throw new RuntimeException("Usuario no encontrado");
         }

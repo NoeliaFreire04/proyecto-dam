@@ -92,7 +92,11 @@ public class RecipeService {
             }
         }
 
-        return toDTO(recipeSave);
+        // Recargar la receta desde BD para que la lista de ingredientes esté
+        // poblada antes de convertirla a DTO. Si no, sale vacía porque JPA
+        // no actualiza automáticamente la colección One-to-Many tras los saves.
+        Recipe persisted = recipeRepository.findById(recipeSave.getId()).orElse(recipeSave);
+        return toDTO(persisted);
     }
 
     /**

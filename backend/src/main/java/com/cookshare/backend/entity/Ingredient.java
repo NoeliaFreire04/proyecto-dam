@@ -41,6 +41,18 @@ public class Ingredient {
     private String name;
 
     /**
+     * Indica si el ingrediente ha sido introducido por un usuario y
+     * todavía no ha sido validado por un administrador del catálogo.
+     * Los ingredientes pendientes de revisión pueden aparecer en recetas
+     * pero no se exportan al catálogo oficial hasta su aprobación.
+     * La columna es nullable para que MySQL pueda añadirla sin problemas
+     * a una tabla con filas existentes cuando ddl-auto=update.
+     */
+    @Builder.Default
+    @Column(name = "pendiente_revision")
+    private Boolean pendienteRevision = true;
+
+    /**
      * Recetas en las que aparece este ingrediente.
      * Relación One-to-Many con RecipeIngredient.
      * No se elimina en cascada — el ingrediente pertenece al catálogo global.
