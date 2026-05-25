@@ -10,6 +10,7 @@ import com.cookshare.backend.repository.InventoryItemRepository;
 import com.cookshare.backend.repository.RecipeRepository;
 import com.cookshare.backend.repository.ShoppingListItemRepository;
 import com.cookshare.backend.repository.UserRepository;
+import com.cookshare.backend.util.UnitNormalizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,28 +57,81 @@ public class ShoppingListService {
         }
         Recipe recipe = optionalRecipe.get();
 
-        // Obtiene los nombres del inventario del usuario en minúsculas para comparar
+        // Obtiene los nombres del inventario del usuario para comparar.
+        // Normalizamos a minúsculas para comparar sin distinguir mayúsculas.
         List<InventoryItem> inventory = inventoryItemRepository.findByUserId(user.getId());
         List<String> inventoryNames = new ArrayList<>();
         for (InventoryItem inv : inventory) {
-            inventoryNames.add(inv.getItemName().toLowerCase());
+            if (inv.getItemName() != null) {
+                inventoryNames.add(inv.getItemName().toLowerCase().trim());
+            }
         }
+
+        // Obtenemos los items YA existentes en la lista de la compra del
+        // usuario para no duplicar — si ya está, sumamos la cantidad.
+        List<ShoppingListItem> existing =
+                shoppingListItemRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
 
         // Recorre los ingredientes de la receta y añade los que faltan
         List<ShoppingListItemDTO> generated = new ArrayList<>();
         for (RecipeIngredient ri : recipe.getRecipeIngredients()) {
-            String ingredientName = ri.getIngredient().getName().toLowerCase();
+            String ingredientName = ri.getIngredient().getName().toLowerCase().trim();
 
-            if (!inventoryNames.contains(ingredientName)) {
-                BigDecimal qty = ri.getQuantity();
+            // Comparación flexible con la despensa:
+            //  - Coincidencia exacta: "tomate" == "tomate"
+            //  - Plural/singular: si uno contiene al otro
+            //  - Compuestos: "tomate cherry" cubre "tomate"
+            // Así evitamos añadir a la lista lo que el usuario YA tiene.
+            boolean inPantry = false;
+            for (String invName : inventoryNames) {
+                if (invName.equals(ingredientName)
+                        || invName.contains(ingredientName)
+                        || ingredientName.contains(invName)) {
+                    inPantry = true;
+                    break;
+                }
+            }
+            if (inPantry) {
+                continue;
+            }
+
+            BigDecimal qty = ri.getQuantity();
+            Double qtyDouble = qty != null ? qty.doubleValue() : null;
+            String unit = ri.getUnit();
+
+            // ¿Ya hay un item en la lista con el mismo nombre y misma unidad?
+            // Si sí, sumamos cantidades y desmarcamos como comprado.
+            ShoppingListItem match = null;
+            for (ShoppingListItem it : existing) {
+                if (it.getItemName() != null
+                        && it.getItemName().equalsIgnoreCase(ri.getIngredient().getName())
+                        && ((unit == null && it.getUnit() == null)
+                            || (unit != null && unit.equalsIgnoreCase(it.getUnit())))) {
+                    match = it;
+                    break;
+                }
+            }
+
+            if (match != null) {
+                Double current = match.getQuantity();
+                if (current != null && qtyDouble != null) {
+                    match.setQuantity(current + qtyDouble);
+                } else if (qtyDouble != null) {
+                    match.setQuantity(qtyDouble);
+                }
+                match.setIsChecked(false);
+                generated.add(toDTO(shoppingListItemRepository.save(match)));
+            } else {
                 ShoppingListItem item = ShoppingListItem.builder()
                         .user(user)
                         .itemName(ri.getIngredient().getName())
-                        .quantity(qty != null ? qty.doubleValue() : null)
-                        .unit(ri.getUnit())
+                        .quantity(qtyDouble)
+                        .unit(unit)
                         .isChecked(false)
                         .build();
-                generated.add(toDTO(shoppingListItemRepository.save(item)));
+                ShoppingListItem saved = shoppingListItemRepository.save(item);
+                existing.add(saved);
+                generated.add(toDTO(saved));
             }
         }
 
@@ -97,8 +151,9 @@ public class ShoppingListService {
                 .user(user)
                 .itemName(dto.getItemName().trim())
                 .quantity(dto.getQuantity())
-                .unit(dto.getUnit())
+                .unit(UnitNormalizer.normalize(dto.getUnit()))
                 .isChecked(Boolean.TRUE.equals(dto.getIsChecked()))
+                .emoji(dto.getEmoji())
                 .build();
         return toDTO(shoppingListItemRepository.save(item));
     }
@@ -159,14 +214,15 @@ public class ShoppingListService {
                 .toList();
     }
 
-    /** Convierte la entidad a DTO. */
+    /** Convierte la entidad a DTO. Normaliza unidad por si viene legacy. */
     public ShoppingListItemDTO toDTO(ShoppingListItem item) {
         return ShoppingListItemDTO.builder()
                 .id(item.getId())
                 .itemName(item.getItemName())
                 .quantity(item.getQuantity())
-                .unit(item.getUnit())
+                .unit(UnitNormalizer.normalize(item.getUnit()))
                 .isChecked(item.getIsChecked())
+                .emoji(item.getEmoji())
                 .createdAt(item.getCreatedAt())
                 .build();
     }

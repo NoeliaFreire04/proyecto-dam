@@ -44,6 +44,12 @@ public class RecipeDTO {
     private String imageUrl;
 
     /**
+     * Categoría de la receta como string ("ITALIANA", "VEGANA", "FRIA"...).
+     * Se valida en el service contra el enum Category.
+     */
+    private String category;
+
+    /**
      * Nombre del autor.
      */
     private String authorUsername;

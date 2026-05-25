@@ -38,6 +38,7 @@ class ShoppingListService {
     required String itemName,
     double? quantity,
     String? unit,
+    String? emoji,
   }) async {
     final headers = await _authHeaders();
     final response = await http.post(
@@ -47,6 +48,7 @@ class ShoppingListService {
         'itemName': itemName,
         'quantity': quantity,
         'unit': unit,
+        'emoji': emoji,
       }),
     );
     if (response.statusCode == 201 || response.statusCode == 200) {

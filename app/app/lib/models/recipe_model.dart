@@ -31,6 +31,9 @@ class Recipe {
   final int servingsBase;
   final bool isPublic;
   final String? imageUrl;
+  /// Categoría en formato del enum backend (ITALIANA, VEGANA, ...).
+  /// Si no viene, asumimos OTRA.
+  final String category;
   final String authorUsername;
   final String? createdAt;
   final List<RecipeIngredient> recipeIngredients;
@@ -43,6 +46,7 @@ class Recipe {
     required this.servingsBase,
     required this.isPublic,
     this.imageUrl,
+    this.category = 'OTRA',
     required this.authorUsername,
     this.createdAt,
     required this.recipeIngredients,
@@ -62,9 +66,34 @@ class Recipe {
       servingsBase: (json['servingsBase'] as num?)?.toInt() ?? 1,
       isPublic: json['isPublic'] ?? false,
       imageUrl: json['imageUrl'],
+      category: (json['category'] as String?) ?? 'OTRA',
       authorUsername: json['authorUsername'] ?? '',
       createdAt: json['createdAt']?.toString(),
       recipeIngredients: ingredients,
     );
   }
+}
+
+/// Catálogo central de categorías visible para el usuario.
+/// Debe estar sincronizado con el enum Category del backend.
+class RecipeCategories {
+  static const Map<String, String> values = {
+    'ITALIANA': 'Italiana',
+    'MEDITERRANEA': 'Mediterránea',
+    'VEGANA': 'Vegana',
+    'VEGETARIANA': 'Vegetariana',
+    'FRIA': 'Fría',
+    'POSTRE': 'Postre',
+    'CARNE': 'Carne',
+    'PESCADO': 'Pescado',
+    'SOPA': 'Sopa',
+    'PASTA': 'Pasta',
+    'ASIATICA': 'Asiática',
+    'MEXICANA': 'Mexicana',
+    'TRADICIONAL': 'Tradicional',
+    'OTRA': 'Otra',
+  };
+
+  /// Convierte el código del enum a su nombre legible.
+  static String label(String code) => values[code] ?? 'Otra';
 }

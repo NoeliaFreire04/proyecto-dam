@@ -2,6 +2,7 @@ package com.cookshare.backend.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -55,6 +56,10 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        // CORS preflight: el navegador manda OPTIONS sin Authorization
+                        // antes de cualquier POST/PUT/DELETE con headers personalizados.
+                        // Si lo bloqueamos, devolvemos 403 y el POST real nunca se manda.
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/recipes/feed").permitAll()
                         .anyRequest().authenticated()

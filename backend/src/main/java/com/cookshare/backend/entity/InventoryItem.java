@@ -72,4 +72,12 @@ public class InventoryItem {
      */
     @Column(length = 50)
     private String unit;
+
+    /**
+     * Emoji asociado al producto para mostrarlo en la UI.
+     * Es un string corto (1-4 chars Unicode) que el usuario elige al añadir.
+     * Si es null, la UI muestra un icono genérico de despensa.
+     */
+    @Column(length = 16)
+    private String emoji;
 }

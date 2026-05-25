@@ -4,6 +4,7 @@ import com.cookshare.backend.entity.InventoryItem;
 import com.cookshare.backend.entity.User;
 import com.cookshare.backend.repository.InventoryItemRepository;
 import com.cookshare.backend.repository.UserRepository;
+import com.cookshare.backend.util.UnitNormalizer;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -52,6 +53,8 @@ public class InventoryService {
     public InventoryItem addItem(InventoryItem item, String username) {
         User user = findUser(username);
         item.setUser(user);
+        // Normaliza la unidad al guardar para evitar variantes ("gramos"→"g").
+        item.setUnit(UnitNormalizer.normalize(item.getUnit()));
         return inventoryItemRepository.save(item);
     }
 

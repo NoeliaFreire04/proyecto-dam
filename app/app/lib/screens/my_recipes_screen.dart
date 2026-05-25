@@ -5,7 +5,7 @@ import '../widgets/recipe/recipe_card.dart';
 import 'recipe_detail_screen.dart';
 
 /// Pantalla con el listado completo de recetas creadas por el usuario.
-/// Se accede desde el perfil al pulsar la estadística "Recetas".
+/// Incluye buscador por nombre y ordenación por fecha (más reciente primero).
 class MyRecipesScreen extends StatefulWidget {
   const MyRecipesScreen({super.key});
 
@@ -15,6 +15,8 @@ class MyRecipesScreen extends StatefulWidget {
 
 class _MyRecipesScreenState extends State<MyRecipesScreen> {
   final RecipeService _service = RecipeService();
+  final TextEditingController _searchCtrl = TextEditingController();
+
   List<Recipe> _recipes = [];
   bool _loading = true;
 
@@ -22,6 +24,13 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
   void initState() {
     super.initState();
     _load();
+    _searchCtrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -42,8 +51,32 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
     }
   }
 
+  /// Recetas filtradas por búsqueda y ordenadas de más nueva a más antigua.
+  List<Recipe> get _filtered {
+    var list = List<Recipe>.from(_recipes);
+
+    // Ordenar por fecha descendente (más reciente primero).
+    // createdAt es un String ISO 8601; la comparación lexicográfica funciona.
+    list.sort((a, b) {
+      final aDate = a.createdAt ?? '';
+      final bDate = b.createdAt ?? '';
+      return bDate.compareTo(aDate);
+    });
+
+    final q = _searchCtrl.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list
+          .where((r) => r.title.toLowerCase().contains(q))
+          .toList();
+    }
+
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filtered = _filtered;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0E8),
       appBar: AppBar(
@@ -67,64 +100,109 @@ class _MyRecipesScreenState extends State<MyRecipesScreen> {
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF0C2D4E)))
-          : _recipes.isEmpty
-              ? _buildEmpty()
-              : RefreshIndicator(
-                  color: const Color(0xFFF5C518),
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: _recipes.length,
-                    itemBuilder: (_, i) {
-                      final recipe = _recipes[i];
-                      return RecipeCard(
-                        recipe: recipe,
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  RecipeDetailScreen(recipe: recipe),
-                            ),
-                          );
-                          // Al volver del detalle (puede haberse borrado),
-                          // recargamos la lista.
-                          _load();
-                        },
-                        trailing: Icon(
-                          recipe.isPublic
-                              ? Icons.public
-                              : Icons.lock_outline,
-                          color: const Color(0xFF0C2D4E),
-                          size: 18,
+          : Column(
+              children: [
+                _buildSearchBar(),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? _buildEmpty()
+                      : RefreshIndicator(
+                          color: const Color(0xFFF5C518),
+                          onRefresh: _load,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.only(
+                                top: 4, bottom: 8),
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final recipe = filtered[i];
+                              return RecipeCard(
+                                recipe: recipe,
+                                onTap: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          RecipeDetailScreen(recipe: recipe),
+                                    ),
+                                  );
+                                  _load();
+                                },
+                                trailing: Icon(
+                                  recipe.isPublic
+                                      ? Icons.public
+                                      : Icons.lock_outline,
+                                  color: const Color(0xFF0C2D4E),
+                                  size: 18,
+                                ),
+                              );
+                            },
+                          ),
                         ),
-                      );
-                    },
-                  ),
                 ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      child: TextField(
+        controller: _searchCtrl,
+        style: const TextStyle(color: Color(0xFF0C2D4E)),
+        decoration: InputDecoration(
+          hintText: 'Buscar receta...',
+          hintStyle: const TextStyle(color: Color(0xFF7E8A99)),
+          prefixIcon:
+              const Icon(Icons.search, color: Color(0xFF0C2D4E), size: 20),
+          suffixIcon: _searchCtrl.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear,
+                      color: Color(0xFF0C2D4E), size: 18),
+                  onPressed: () => _searchCtrl.clear(),
+                )
+              : null,
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildEmpty() {
+    final isSearching = _searchCtrl.text.trim().isNotEmpty;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(Icons.restaurant_outlined,
-              size: 64, color: Color(0xFF0C2D4E)),
-          SizedBox(height: 16),
+        children: [
+          Icon(
+            isSearching ? Icons.search_off : Icons.restaurant_outlined,
+            size: 64,
+            color: const Color(0xFF0C2D4E),
+          ),
+          const SizedBox(height: 16),
           Text(
-            'Aún no has creado ninguna receta',
-            style: TextStyle(
+            isSearching
+                ? 'No hay recetas que coincidan'
+                : 'Aún no has creado ninguna receta',
+            style: const TextStyle(
                 color: Color(0xFF0C2D4E),
                 fontSize: 18,
                 fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
-            'Ve a la pestaña "Crear" para añadir\ntu primera receta',
+            isSearching
+                ? 'Prueba con otro nombre'
+                : 'Ve a la pestaña "Crear" para añadir\ntu primera receta',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF5A7A9A), fontSize: 14),
+            style: const TextStyle(color: Color(0xFF5A7A9A), fontSize: 14),
           ),
         ],
       ),

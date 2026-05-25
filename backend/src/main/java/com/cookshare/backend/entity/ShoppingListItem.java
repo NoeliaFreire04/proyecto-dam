@@ -69,6 +69,13 @@ public class ShoppingListItem {
     @Builder.Default
     private Boolean isChecked = false;
 
+    /**
+     * Emoji asociado al producto para mostrarlo en la UI.
+     * String corto (1-4 chars Unicode). Si es null la UI usa un icono.
+     */
+    @Column(length = 16)
+    private String emoji;
+
     /** Fecha y hora en que se añadió el ítem a la lista. */
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

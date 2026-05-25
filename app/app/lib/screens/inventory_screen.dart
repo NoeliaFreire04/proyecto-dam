@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/inventory_item_model.dart';
+import '../models/unit.dart';
 import '../services/inventory_service.dart';
+import '../widgets/unit_dropdown.dart';
 
 //pantalla que muestra y gestiona el inventario doméstico del usuario
 class InventoryScreen extends StatefulWidget {
@@ -14,7 +17,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
   final InventoryService _service = InventoryService();
   final TextEditingController _nameCtrl = TextEditingController();
   final TextEditingController _quantityCtrl = TextEditingController();
-  final TextEditingController _unitCtrl = TextEditingController();
+  // Unidad seleccionada al añadir un producto al inventario.
+  Unit _selectedUnit = Unit.uds;
 
   List<InventoryItem> _items = [];
   bool _loading = true;
@@ -30,7 +34,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _quantityCtrl.dispose();
-    _unitCtrl.dispose();
     super.dispose();
   }
 
@@ -57,18 +60,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
     setState(() => _adding = true);
     try {
       final qty = double.tryParse(_quantityCtrl.text.replaceAll(',', '.'));
-      final unit = _unitCtrl.text.trim();
       final created = await _service.add(
         itemName: name,
         quantity: qty,
-        unit: unit.isEmpty ? null : unit,
+        unit: _selectedUnit.code,
       );
       if (!mounted) return;
       setState(() {
         _items.insert(0, created);
         _nameCtrl.clear();
         _quantityCtrl.clear();
-        _unitCtrl.clear();
+        _selectedUnit = Unit.uds;
       });
       Navigator.of(context).pop();
     } catch (_) {
@@ -97,7 +99,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void _showAddDialog() {
     _nameCtrl.clear();
     _quantityCtrl.clear();
-    _unitCtrl.clear();
+    setState(() => _selectedUnit = Unit.uds);
 
     showModalBottomSheet(
       context: context,
@@ -106,7 +108,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
       builder: (ctx) => _AddItemSheet(
         nameCtrl: _nameCtrl,
         quantityCtrl: _quantityCtrl,
-        unitCtrl: _unitCtrl,
+        unit: _selectedUnit,
+        onUnitChanged: (u) => setState(() => _selectedUnit = u),
         adding: _adding,
         onAdd: _add,
       ),
@@ -277,14 +280,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
 class _AddItemSheet extends StatefulWidget {
   final TextEditingController nameCtrl;
   final TextEditingController quantityCtrl;
-  final TextEditingController unitCtrl;
+  final Unit unit;
+  final ValueChanged<Unit> onUnitChanged;
   final bool adding;
   final VoidCallback onAdd;
 
   const _AddItemSheet({
     required this.nameCtrl,
     required this.quantityCtrl,
-    required this.unitCtrl,
+    required this.unit,
+    required this.onUnitChanged,
     required this.adding,
     required this.onAdd,
   });
@@ -335,19 +340,26 @@ class _AddItemSheetState extends State<_AddItemSheet> {
           Row(
             children: [
               Expanded(
+                flex: 2,
                 child: _buildField(
                   controller: widget.quantityCtrl,
-                  hint: 'Cantidad (ej: 500)',
+                  hint: 'Cantidad',
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  ],
                 ),
               ),
               const SizedBox(width: 10),
+              // Dropdown estandarizado de unidades (sustituye al TextField).
+              // Modo dark para encajar con el fondo azul del bottom sheet.
               Expanded(
-                child: _buildField(
-                  controller: widget.unitCtrl,
-                  hint: 'Unidad (ej: g, ml)',
-                  keyboardType: TextInputType.text,
+                flex: 3,
+                child: UnitDropdown(
+                  value: widget.unit,
+                  onChanged: widget.onUnitChanged,
+                  dark: true,
                 ),
               ),
             ],
@@ -390,10 +402,12 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     required TextEditingController controller,
     required String hint,
     required TextInputType keyboardType,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: hint,

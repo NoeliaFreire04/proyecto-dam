@@ -73,6 +73,16 @@ public class Recipe {
     @Column(name = "image_url")
     private String imageUrl;
 
+    /**
+     * Categoría de la receta (Italiana, Vegana, Fría, etc.).
+     * Se usa para los filtros del feed.
+     * Por defecto OTRA si el usuario no especifica.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    @Builder.Default
+    private Category category = Category.OTRA;
+
     /** Fecha y hora de creación. Se asigna automáticamente. */
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

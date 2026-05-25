@@ -1,5 +1,6 @@
 package com.cookshare.backend.repository;
 
+import com.cookshare.backend.entity.Category;
 import com.cookshare.backend.entity.Recipe;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,11 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
     Page<Recipe> findByIsPublicTrue(Pageable pageable);
 
     /**
+     * Feed público filtrado por categoría.
+     */
+    Page<Recipe> findByIsPublicTrueAndCategory(Category category, Pageable pageable);
+
+    /**
      * Devuelve todas las recetas de un usuario concreto.
      * @param userId id del usuario propietario
      * @return lista de recetas del usuario
@@ -30,7 +36,4 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
 
     /** Recetas de un autor concreto. */
     List<Recipe> findByUserUsername(String username);
-
-
-
 }

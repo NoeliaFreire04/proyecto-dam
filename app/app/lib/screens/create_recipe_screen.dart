@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/recipe_model.dart';
 import '../widgets/recipe/create_mode_toggle.dart';
 import 'create_recipe/manual_mode_view.dart';
 import 'create_recipe/video_mode_view.dart';
@@ -8,16 +9,19 @@ import 'create_recipe/video_mode_view.dart';
 /// Contiene el header, el toggle entre modo vídeo (IA) y manual,
 /// y la vista correspondiente embebida.
 ///
-/// `startInVideoMode` permite forzar el modo inicial cuando se llega
-/// desde la tarjeta amarilla del Feed.
+/// - `startInVideoMode`: fuerza el modo inicial cuando se llega desde el Feed.
+/// - `initialRecipe`: si se pasa, entra en modo edición (manual forzado,
+///   formulario pre-relleno, título "Editar receta").
 class CreateRecipeScreen extends StatefulWidget {
   final bool startInVideoMode;
   final bool showBackButton;
+  final Recipe? initialRecipe;
 
   const CreateRecipeScreen({
     super.key,
     this.startInVideoMode = true,
     this.showBackButton = false,
+    this.initialRecipe,
   });
 
   @override
@@ -30,7 +34,9 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
   @override
   void initState() {
     super.initState();
-    _videoMode = widget.startInVideoMode;
+    // En modo edición siempre arrancamos en manual (el vídeo no tiene sentido
+    // para editar una receta ya existente).
+    _videoMode = widget.initialRecipe != null ? false : widget.startInVideoMode;
   }
 
   @override
@@ -60,18 +66,24 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
               if (widget.showBackButton) const SizedBox(height: 8),
               _buildHeader(),
               const SizedBox(height: 18),
-              CreateModeToggle(
-                isVideoMode: _videoMode,
-                onChanged: (v) => setState(() => _videoMode = v),
-              ),
-              const SizedBox(height: 18),
+              // En modo edición ocultamos el toggle vídeo/manual.
+              if (widget.initialRecipe == null) ...[
+                CreateModeToggle(
+                  isVideoMode: _videoMode,
+                  onChanged: (v) => setState(() => _videoMode = v),
+                ),
+                const SizedBox(height: 18),
+              ],
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 250),
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
                 child: _videoMode
                     ? const VideoModeView(key: ValueKey('video'))
-                    : const ManualModeView(key: ValueKey('manual')),
+                    : ManualModeView(
+                        key: const ValueKey('manual'),
+                        initialRecipe: widget.initialRecipe,
+                      ),
               ),
             ],
           ),
@@ -109,25 +121,28 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
   }
 
   Widget _buildHeader() {
+    final isEditing = widget.initialRecipe != null;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: const [
+      children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Nueva receta',
-                style: TextStyle(
+                isEditing ? 'Editar receta' : 'Nueva receta',
+                style: const TextStyle(
                   color: Color(0xFF0C2D4E),
                   fontWeight: FontWeight.bold,
                   fontSize: 22,
                 ),
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 2),
               Text(
-                'Manual o con inteligencia artificial',
-                style: TextStyle(color: Color(0xFF7E8A99), fontSize: 12),
+                isEditing
+                    ? 'Modifica los campos y guarda los cambios'
+                    : 'Manual o con inteligencia artificial',
+                style: const TextStyle(color: Color(0xFF7E8A99), fontSize: 12),
               ),
             ],
           ),

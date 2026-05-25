@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/recipe_model.dart';
 import '../services/recipe_service.dart';
 import '../services/shopping_list_service.dart';
+import 'create_recipe_screen.dart';
 
 class RecipeDetailScreen extends StatefulWidget {
   final Recipe recipe;
@@ -29,6 +30,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     super.initState();
     _servings = widget.recipe.servingsBase;
     _loadCurrentUser();
+    _loadFavoriteStatus();
   }
 
   Future<void> _loadCurrentUser() async {
@@ -39,25 +41,63 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     });
   }
 
+  // Carga el estado real de favorito consultando la lista de favoritos del
+  // usuario. Si la receta ya está, marcamos el corazón en amarillo desde
+  // el principio. Así evitamos intentar ADD cuando ya existe (que daba
+  // "Error al actualizar favorito").
+  Future<void> _loadFavoriteStatus() async {
+    try {
+      final favs = await _service.getFavorites();
+      if (!mounted) return;
+      setState(() {
+        _isFavorite = favs.any((r) => r.id == widget.recipe.id);
+      });
+    } catch (_) {
+      // Si falla, dejamos _isFavorite en false; el usuario lo verá igual.
+    }
+  }
+
   bool get _isAuthor => _currentUsername == widget.recipe.authorUsername;
 
   Future<void> _toggleFavorite() async {
+    if (_favoriteLoading) return;
     setState(() => _favoriteLoading = true);
+
+    // Optimismo: cambiamos el icono ya y revertimos si falla la llamada.
+    final previous = _isFavorite;
+    setState(() => _isFavorite = !previous);
+
     try {
-      if (_isFavorite) {
+      if (previous) {
         await _service.removeFavorite(widget.recipe.id);
       } else {
         await _service.addFavorite(widget.recipe.id);
       }
-      setState(() => _isFavorite = !_isFavorite);
     } catch (_) {
       if (mounted) {
+        // Revertimos al estado anterior si la API falla.
+        setState(() => _isFavorite = previous);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Error al actualizar favorito')),
         );
       }
     } finally {
-      setState(() => _favoriteLoading = false);
+      if (mounted) setState(() => _favoriteLoading = false);
+    }
+  }
+
+  Future<void> _editRecipe() async {
+    final result = await Navigator.push<Recipe>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateRecipeScreen(
+          initialRecipe: widget.recipe,
+          showBackButton: true,
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      Navigator.pop(context, true);
     }
   }
 
@@ -146,6 +186,11 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
+              if (_isAuthor)
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                  onPressed: _editRecipe,
+                ),
               if (_isAuthor)
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.white),
@@ -245,6 +290,9 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   }
 
   Widget _buildInfoHeader() {
+    final description = widget.recipe.description?.trim() ?? '';
+    final categoryLabel = RecipeCategories.label(widget.recipe.category);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
       child: Column(
@@ -259,29 +307,60 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
+          // Línea con autor, raciones y categoría como chip.
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Icon(Icons.person_outline,
-                  size: 16, color: Color(0xFF0C2D4E)),
-              const SizedBox(width: 4),
-              Text(
-                widget.recipe.authorUsername,
-                style: const TextStyle(
-                    color: Color(0xFF0C2D4E), fontSize: 14),
-              ),
-              const SizedBox(width: 16),
-              const Icon(Icons.people_outline,
-                  size: 16, color: Color(0xFF0C2D4E)),
-              const SizedBox(width: 4),
-              Text(
-                '${widget.recipe.servingsBase} porciones base',
-                style: const TextStyle(
-                    color: Color(0xFF0C2D4E), fontSize: 14),
+              _iconText(Icons.person_outline, widget.recipe.authorUsername),
+              _iconText(Icons.people_outline,
+                  '${widget.recipe.servingsBase} porciones base'),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5C518),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  categoryLabel,
+                  style: const TextStyle(
+                    color: Color(0xFF0C2D4E),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
+          // Descripción del autor (si existe), debajo del usuario y porciones
+          // como pidió el usuario.
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              description,
+              style: const TextStyle(
+                color: Color(0xFF0C2D4E),
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _iconText(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: const Color(0xFF0C2D4E)),
+        const SizedBox(width: 4),
+        Text(text,
+            style: const TextStyle(color: Color(0xFF0C2D4E), fontSize: 14)),
+      ],
     );
   }
 
@@ -387,6 +466,15 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   }
 
   Widget _buildInstructions() {
+    // Partimos los pasos por saltos de línea. Si el usuario ya numeró
+    // ("1. Pica..."), lo respetamos. Si no, los presentamos como bullets.
+    final raw = widget.recipe.instructions ?? '';
+    final lines = raw
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Column(
@@ -400,13 +488,69 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                 fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          Text(
-            widget.recipe.instructions!,
-            style: const TextStyle(
-                color: Color(0xFF0C2D4E), fontSize: 15, height: 1.6),
-          ),
+          if (lines.isEmpty)
+            const Text(
+              'Sin pasos especificados',
+              style: TextStyle(color: Color(0xFF7E8A99), fontSize: 14),
+            )
+          else
+            ..._buildStepList(lines),
         ],
       ),
     );
+  }
+
+  /// Renderiza cada línea de instrucciones como un paso numerado.
+  /// Si la línea ya empieza por "1.", "2. " etc, no añadimos el número
+  /// (respetamos lo que escribió el usuario).
+  List<Widget> _buildStepList(List<String> lines) {
+    final widgets = <Widget>[];
+    final hasOwnNumbers = lines.any((l) => RegExp(r'^\d+[\.\)]').hasMatch(l));
+
+    for (int i = 0; i < lines.length; i++) {
+      final stepText = hasOwnNumbers
+          ? lines[i].replaceFirst(RegExp(r'^\d+[\.\)]\s*'), '')
+          : lines[i];
+
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Número en círculo amarillo
+            Container(
+              width: 26,
+              height: 26,
+              margin: const EdgeInsets.only(top: 1),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF5C518),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '${i + 1}',
+                style: const TextStyle(
+                  color: Color(0xFF0C2D4E),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                stepText,
+                style: const TextStyle(
+                  color: Color(0xFF0C2D4E),
+                  fontSize: 15,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+    return widgets;
   }
 }

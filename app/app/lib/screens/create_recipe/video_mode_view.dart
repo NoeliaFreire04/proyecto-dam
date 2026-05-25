@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../models/recipe_model.dart';
@@ -29,7 +30,9 @@ class _VideoModeViewState extends State<VideoModeView> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: _allowedExtensions,
-        withData: false,
+        // En web el path no existe, hay que pedir bytes. En móvil/desktop
+        // usamos path normal (más eficiente, no carga todo en memoria).
+        withData: kIsWeb,
       );
       if (result == null || result.files.isEmpty) return;
 
@@ -52,15 +55,25 @@ class _VideoModeViewState extends State<VideoModeView> {
 
   Future<void> _analyze() async {
     final file = _selectedFile;
-    if (file == null || file.path == null) {
+    if (file == null) {
       _showError('Selecciona un vídeo primero');
+      return;
+    }
+    // En web miramos bytes; en móvil miramos path
+    if (kIsWeb && file.bytes == null) {
+      _showError('No se pudo leer el vídeo seleccionado');
+      return;
+    }
+    if (!kIsWeb && file.path == null) {
+      _showError('No se pudo leer el vídeo seleccionado');
       return;
     }
 
     setState(() => _analyzing = true);
     try {
       final Recipe created = await _service.createFromVideo(
-        filePath: file.path!,
+        filePath: kIsWeb ? null : file.path,
+        bytes: kIsWeb ? file.bytes : null,
         fileName: file.name,
       );
       if (!mounted) return;
@@ -83,7 +96,10 @@ class _VideoModeViewState extends State<VideoModeView> {
         ),
       );
     } catch (e) {
-      _showError('Error al analizar el vídeo');
+      // Mostramos el mensaje real del backend (rate limit, API key, etc.)
+      String msg = e.toString().replaceFirst('Exception: ', '');
+      if (msg.length > 200) msg = msg.substring(0, 200);
+      _showError(msg.isEmpty ? 'Error al analizar el vídeo' : msg);
     } finally {
       if (mounted) setState(() => _analyzing = false);
     }
@@ -176,27 +192,38 @@ class _VideoModeViewState extends State<VideoModeView> {
   }
 
   Widget _buildGeminiBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5C518),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.auto_awesome, color: Color(0xFF0C2D4E), size: 14),
-          SizedBox(width: 4),
-          Text(
-            'Google Gemini',
-            style: TextStyle(
-              color: Color(0xFF0C2D4E),
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
+    // FittedBox con scaleDown garantiza que si la pantalla es muy estrecha
+    // el badge se redimensione en lugar de desbordarse. Wrap por fuera
+    // evita que ocupe todo el ancho disponible.
+    return Wrap(
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5C518),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome, color: Color(0xFF0C2D4E), size: 14),
+                SizedBox(width: 4),
+                Text(
+                  'Google Gemini',
+                  style: TextStyle(
+                    color: Color(0xFF0C2D4E),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

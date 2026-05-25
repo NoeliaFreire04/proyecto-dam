@@ -15,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final _shoppingKey = GlobalKey<ShoppingListScreenState>();
+  final _favoritesKey = GlobalKey<FavoritesScreenState>();
   late final List<Widget> _screens;
 
   @override
@@ -23,16 +24,20 @@ class _HomeScreenState extends State<HomeScreen> {
     //se inicializa aquí para poder pasar el callback que cambia el tab activo
     _screens = [
       FeedScreen(onNavigateToProfile: () => setState(() => _currentIndex = 4)),
-      const FavoritesScreen(),
+      FavoritesScreen(key: _favoritesKey),
       const CreateRecipeScreen(),
       ShoppingListScreen(key: _shoppingKey),
       const ProfileScreen(),
     ];
   }
 
-  //al volver al tab de compra recarga la lista para mostrar ítems añadidos
-  //desde RecipeDetailScreen o desde cualquier otra pantalla
+  //al cambiar de tab, recargamos las pantallas dinámicas (Favoritos y Mi
+  //compra) para que reflejen cambios hechos en otras tabs (p.ej. marcar
+  //como favorito desde el feed o añadir desde una receta).
   void _onTabTap(int index) {
+    if (index == 1 && _currentIndex != 1) {
+      _favoritesKey.currentState?.reload();
+    }
     if (index == 3 && _currentIndex != 3) {
       _shoppingKey.currentState?.reload();
     }

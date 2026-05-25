@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../models/unit.dart';
+import '../unit_dropdown.dart';
 
 /// Una fila editable del listado de ingredientes en el formulario manual.
-/// Incluye campo de nombre, campo de cantidad+unidad y botón para borrar.
+///
+/// Estructura: [nombre]  [cantidad numérica]  [dropdown unidad]  [✕]
+///
+/// La unidad se selecciona de un dropdown único en toda la app (Unit
+/// enum). Así evitamos que cada usuario escriba "g" / "gr" / "gramos"
+/// y rompa los matchings con la despensa.
 class IngredientFormRow extends StatelessWidget {
   final TextEditingController nameController;
   final TextEditingController quantityController;
+  final Unit unit;
+  final ValueChanged<Unit> onUnitChanged;
   final VoidCallback? onRemove;
   final bool canRemove;
 
@@ -12,6 +23,8 @@ class IngredientFormRow extends StatelessWidget {
     super.key,
     required this.nameController,
     required this.quantityController,
+    required this.unit,
+    required this.onUnitChanged,
     this.onRemove,
     this.canRemove = true,
   });
@@ -23,21 +36,38 @@ class IngredientFormRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Nombre del ingrediente
           Expanded(
-            flex: 3,
+            flex: 4,
             child: _RecipeTextField(
               controller: nameController,
               hint: 'Ingrediente...',
               maxLength: 80,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
+          // Cantidad numérica (solo dígitos + coma/punto)
           Expanded(
             flex: 2,
             child: _RecipeTextField(
               controller: quantityController,
               hint: 'cant.',
-              maxLength: 30,
+              maxLength: 10,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Dropdown de unidad
+          Expanded(
+            flex: 3,
+            child: UnitDropdown(
+              value: unit,
+              onChanged: onUnitChanged,
+              compact: true,
             ),
           ),
           if (canRemove)
@@ -45,10 +75,12 @@ class IngredientFormRow extends StatelessWidget {
               tooltip: 'Eliminar',
               icon: const Icon(Icons.close,
                   color: Color(0xFF0C2D4E), size: 20),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: onRemove,
             )
           else
-            const SizedBox(width: 48),
+            const SizedBox(width: 32),
         ],
       ),
     );
@@ -59,11 +91,15 @@ class _RecipeTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final int? maxLength;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   const _RecipeTextField({
     required this.controller,
     required this.hint,
     this.maxLength,
+    this.keyboardType,
+    this.inputFormatters,
   });
 
   @override
@@ -71,6 +107,8 @@ class _RecipeTextField extends StatelessWidget {
     return TextField(
       controller: controller,
       maxLength: maxLength,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       style: const TextStyle(color: Color(0xFF0C2D4E)),
       decoration: InputDecoration(
         hintText: hint,
@@ -81,7 +119,7 @@ class _RecipeTextField extends StatelessWidget {
         fillColor: const Color(0xFFF5F0E8),
         counterText: '',
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(

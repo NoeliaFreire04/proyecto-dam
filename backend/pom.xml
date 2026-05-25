@@ -89,9 +89,11 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>0.12.3</version>
         </dependency>
+        <!-- Google Gen AI SDK — reemplaza al WebClient manual para llamar a Gemini -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux</artifactId>
+            <groupId>com.google.genai</groupId>
+            <artifactId>google-genai</artifactId>
+            <version>1.5.0</version>
         </dependency>
 	</dependencies>
 

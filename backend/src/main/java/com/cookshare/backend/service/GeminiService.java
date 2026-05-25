@@ -4,28 +4,23 @@ import com.cookshare.backend.dto.RecipeDTO;
 import com.cookshare.backend.dto.RecipeIngredientDTO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.genai.Client;
+import com.google.genai.types.Blob;
+import com.google.genai.types.Content;
+import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.Part;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 
-/**
- * Servicio de integración con Google Gemini.
- * Recibe un vídeo de cocina, lo envía al modelo y parsea
- * la respuesta para crear una receta estructurada.
- */
 @Service
 public class GeminiService {
 
-    private final WebClient webClient;
     private final ObjectMapper objectMapper;
 
     @Value("${gemini.api.key}")
@@ -34,32 +29,16 @@ public class GeminiService {
     @Value("${gemini.model}")
     private String model;
 
-    /**
-     * Constructor que configura el WebClient con la URL base de Gemini.
-     *
-     * @param apiUrl URL base de la API de Gemini
-     * @param objectMapper mapper JSON de Spring
-     */
-    public GeminiService(@Value("${gemini.api.url}") String apiUrl,
-                         ObjectMapper objectMapper) {
-        this.webClient = WebClient.builder()
-                .baseUrl(apiUrl)
-                .build();
+    public GeminiService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
-    /**
-     * Extrae una receta de un archivo de vídeo usando Google Gemini.
-     * Codifica el vídeo en base64, lo envía con un prompt estructurado
-     * y parsea la respuesta JSON en un RecipeDTO.
-     *
-     * @param videoFile archivo de vídeo subido por el usuario
-     * @return RecipeDTO con los datos extraídos del vídeo
-     * @throws IOException si hay error al leer el archivo
-     */
     public RecipeDTO extractRecipeFromVideo(MultipartFile videoFile) throws IOException {
-        String base64Video = Base64.getEncoder().encodeToString(videoFile.getBytes());
-        String mimeType = videoFile.getContentType();
+        if (apiKey == null || apiKey.isBlank() || apiKey.startsWith("${")) {
+            throw new RuntimeException(
+                "La API key de Gemini no está configurada en application.properties. " +
+                "Revisa la propiedad 'gemini.api.key'.");
+        }
 
         String prompt = """
                 Analiza este vídeo de cocina y extrae la receta completa.
@@ -81,47 +60,71 @@ public class GeminiService {
                 Si no puedes identificar la unidad, usa "al gusto".
                 """;
 
-        // Monta el cuerpo de la petición con el formato que espera Gemini
-        Map<String, Object> requestBody = Map.of(
-                "contents", List.of(
-                        Map.of("parts", List.of(
-                                Map.of("inline_data", Map.of(
-                                        "mime_type", mimeType,
-                                        "data", base64Video
-                                )),
-                                Map.of("text", prompt)
-                        ))
-                )
-        );
+        try {
+            Client client = Client.builder()
+                    .apiKey(apiKey)
+                    .build();
 
-        String requestJson = objectMapper.writeValueAsString(requestBody);
+            String mimeType = videoFile.getContentType();
+            // Fallback: application/octet-stream es genérico y Gemini lo rechaza
+            if (mimeType == null || mimeType.equals("application/octet-stream")) {
+                String filename = videoFile.getOriginalFilename();
+                if (filename != null) {
+                    String ext = filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+                    mimeType = switch (ext) {
+                        case "mp4"  -> "video/mp4";
+                        case "mov"  -> "video/quicktime";
+                        case "avi"  -> "video/x-msvideo";
+                        case "webm" -> "video/webm";
+                        default     -> "video/mp4";
+                    };
+                } else {
+                    mimeType = "video/mp4";
+                }
+            }
+            byte[] videoBytes = videoFile.getBytes();
 
-        // Llama a la API de Gemini
-        String response = webClient.post()
-                .uri("/models/{model}:generateContent?key={key}", model, apiKey)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestJson)
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
+            GenerateContentResponse response = client.models.generateContent(
+                    model,
+                    List.of(
+                            Content.builder()
+                                    .parts(List.of(
+                                            Part.builder()
+                                                    .inlineData(Blob.builder()
+                                                            .mimeType(mimeType)
+                                                            .data(videoBytes)
+                                                            .build())
+                                                    .build(),
+                                            Part.builder()
+                                                    .text(prompt)
+                                                    .build()
+                                    ))
+                                    .build()
+                    ),
+                    null
+            );
 
-        return parseGeminiResponse(response);
+            String text = response.text();
+            return parseGeminiResponse(text);
+
+        } catch (Exception e) {
+            System.err.println("[GeminiService] Error llamando a Gemini: " + e.getMessage());
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.contains("429") || msg.contains("Too Many Requests") || msg.contains("RESOURCE_EXHAUSTED")) {
+                throw new RuntimeException(
+                        "Has alcanzado el límite de peticiones a Gemini. " +
+                        "Espera unos minutos e inténtalo de nuevo.", e);
+            }
+            if (msg.contains("401") || msg.contains("403") || msg.contains("API_KEY") || msg.contains("API key")) {
+                throw new RuntimeException(
+                        "Problema de autenticación con Gemini. Revisa la API key.", e);
+            }
+            throw new RuntimeException("Error al contactar con Gemini: " + msg, e);
+        }
     }
 
-    /**
-     * Parsea la respuesta de Gemini y extrae el RecipeDTO.
-     * La respuesta viene en candidates[0].content.parts[0].text como JSON.
-     *
-     * @param response respuesta raw de la API
-     * @return RecipeDTO con los datos extraídos
-     */
-    private RecipeDTO parseGeminiResponse(String response) {
+    private RecipeDTO parseGeminiResponse(String text) {
         try {
-            JsonNode root = objectMapper.readTree(response);
-            String text = root.path("candidates").get(0)
-                    .path("content").path("parts").get(0)
-                    .path("text").asText();
-
             // Gemini a veces envuelve el JSON en backticks de markdown
             text = text.replace("```json", "").replace("```", "").trim();
 

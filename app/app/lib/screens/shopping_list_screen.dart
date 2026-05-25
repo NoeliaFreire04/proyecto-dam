@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/shopping_list_item_model.dart';
+import '../models/unit.dart';
 import '../services/shopping_list_service.dart';
+import '../widgets/unit_dropdown.dart';
 
 /// Pantalla "Mi compra": gestiona la lista de la compra del usuario.
 /// Permite añadir items manuales, marcarlos como comprados y limpiar
@@ -17,11 +20,17 @@ class ShoppingListScreen extends StatefulWidget {
 // cuando el usuario vuelve a este tab después de añadir desde una receta.
 class ShoppingListScreenState extends State<ShoppingListScreen> {
   final ShoppingListService _service = ShoppingListService();
-  final TextEditingController _addCtrl = TextEditingController();
+  final TextEditingController _nameCtrl = TextEditingController();
+  final TextEditingController _qtyCtrl = TextEditingController();
 
   List<ShoppingListItem> _items = [];
   bool _loading = true;
   bool _adding = false;
+  // Unidad seleccionada para el próximo ítem que se añada.
+  Unit _selectedUnit = Unit.uds;
+  // Emoji que se aplicará al próximo ítem añadido. Null = sin emoji
+  // (la UI muestra el icono genérico de carrito).
+  String? _selectedEmoji;
 
   @override
   void initState() {
@@ -31,7 +40,8 @@ class ShoppingListScreenState extends State<ShoppingListScreen> {
 
   @override
   void dispose() {
-    _addCtrl.dispose();
+    _nameCtrl.dispose();
+    _qtyCtrl.dispose();
     super.dispose();
   }
 
@@ -55,22 +65,28 @@ class ShoppingListScreenState extends State<ShoppingListScreen> {
   }
 
   Future<void> _add() async {
-    final text = _addCtrl.text.trim();
-    if (text.isEmpty || _adding) return;
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty || _adding) return;
 
     setState(() => _adding = true);
     try {
-      // Acepta formatos como "Pomelo 100g" o solo "Pomelo".
-      final parsed = _splitNameAndQuantity(text);
+      // Nombre + cantidad numérica + unidad del dropdown.
+      // La cantidad puede ir vacía (ej. "pizca de sal").
+      final qtyRaw = _qtyCtrl.text.trim().replaceAll(',', '.');
+      final qty = double.tryParse(qtyRaw);
       final created = await _service.add(
-        itemName: parsed['name'] as String,
-        quantity: parsed['quantity'] as double?,
-        unit: parsed['unit'] as String?,
+        itemName: name,
+        quantity: qty,
+        unit: _selectedUnit.code,
+        emoji: _selectedEmoji,
       );
       if (!mounted) return;
       setState(() {
         _items.insert(0, created);
-        _addCtrl.clear();
+        _nameCtrl.clear();
+        _qtyCtrl.clear();
+        _selectedEmoji = null;
+        _selectedUnit = Unit.uds;
       });
     } catch (_) {
       _toast('No se pudo añadir el ítem');
@@ -79,22 +95,24 @@ class ShoppingListScreenState extends State<ShoppingListScreen> {
     }
   }
 
-  /// Parsea "Pomelo 100 g" → name=Pomelo, quantity=100, unit=g.
-  Map<String, dynamic> _splitNameAndQuantity(String input) {
-    final regex = RegExp(r'^(.*?)\s+([\d.,]+)\s*([A-Za-zµ]*)$');
-    final match = regex.firstMatch(input.trim());
-    if (match == null) {
-      return {'name': input.trim(), 'quantity': null, 'unit': null};
+  /// Abre un selector de emoji en bottom sheet.
+  Future<void> _pickEmoji() async {
+    final picked = await showModalBottomSheet<String?>(
+      context: context,
+      backgroundColor: const Color(0xFF0C2D4E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _EmojiPickerSheet(currentEmoji: _selectedEmoji),
+    );
+    // Diferenciamos "no eligió nada (cerrar)" de "eligió quitar emoji".
+    if (!mounted) return;
+    if (picked != null) {
+      // Pasamos string vacío como sentinela de "quitar".
+      setState(() => _selectedEmoji = picked.isEmpty ? null : picked);
     }
-    final name = match.group(1)!.trim();
-    final qty = double.tryParse(match.group(2)!.replaceAll(',', '.'));
-    final unit = match.group(3);
-    return {
-      'name': name.isEmpty ? input.trim() : name,
-      'quantity': qty,
-      'unit': (unit == null || unit.isEmpty) ? null : unit,
-    };
   }
+
 
   Future<void> _toggle(ShoppingListItem item) async {
     // Optimista: actualiza UI antes de la respuesta.
@@ -108,6 +126,7 @@ class ShoppingListScreenState extends State<ShoppingListScreen> {
                   quantity: i.quantity,
                   unit: i.unit,
                   isChecked: !i.isChecked,
+                  emoji: i.emoji,
                   createdAt: i.createdAt,
                 )
               : i)
@@ -275,73 +294,142 @@ class ShoppingListScreenState extends State<ShoppingListScreen> {
   }
 
   Widget _buildAddItem() {
-    return Row(
+    // Layout en 2 filas:
+    //   Fila 1: [emoji]  [nombre del producto............]  [+ añadir]
+    //   Fila 2: [cantidad]                          [dropdown unidad]
+    // Así cabe bien en móvil y cada campo tiene espacio.
+    return Column(
       children: [
-        Expanded(
-          child: TextField(
-            controller: _addCtrl,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _add(),
-            maxLength: 80,
-            style: const TextStyle(color: Color(0xFF0C2D4E)),
-            decoration: InputDecoration(
-              hintText: 'Añadir ítem... (ej: Tomate 200g)',
-              hintStyle:
-                  TextStyle(color: const Color(0xFF0C2D4E).withOpacity(0.4)),
-              filled: true,
-              fillColor: Colors.white,
-              counterText: '',
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 14),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: const Color(0xFF0C2D4E).withOpacity(0.15),
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: const Color(0xFF0C2D4E).withOpacity(0.15),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: Color(0xFFF5C518),
-                  width: 2,
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 52,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _adding ? null : _add,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF5C518),
-              foregroundColor: const Color(0xFF0C2D4E),
-              padding: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: _adding
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF0C2D4E),
+        Row(
+          children: [
+            // Botón cuadrado para elegir emoji
+            SizedBox(
+              width: 52,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _adding ? null : _pickEmoji,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: const Color(0xFF0C2D4E).withOpacity(0.15),
                     ),
-                  )
-                : const Icon(Icons.add, size: 24),
-          ),
+                  ),
+                ),
+                child: Text(
+                  _selectedEmoji ?? '😀',
+                  style: TextStyle(
+                    fontSize: _selectedEmoji != null ? 24 : 22,
+                    color: _selectedEmoji != null
+                        ? null
+                        : const Color(0xFF0C2D4E).withOpacity(0.35),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Nombre del producto
+            Expanded(
+              child: TextField(
+                controller: _nameCtrl,
+                textInputAction: TextInputAction.next,
+                maxLength: 80,
+                style: const TextStyle(color: Color(0xFF0C2D4E)),
+                decoration: _whiteFieldDecoration('Nombre del producto'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Botón de añadir
+            SizedBox(
+              width: 52,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _adding ? null : _add,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF5C518),
+                  foregroundColor: const Color(0xFF0C2D4E),
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _adding
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF0C2D4E),
+                        ),
+                      )
+                    : const Icon(Icons.add, size: 24),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            // Cantidad numérica
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _qtyCtrl,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _add(),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                ],
+                maxLength: 10,
+                style: const TextStyle(color: Color(0xFF0C2D4E)),
+                decoration: _whiteFieldDecoration('Cantidad'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Dropdown de unidad
+            Expanded(
+              flex: 3,
+              child: UnitDropdown(
+                value: _selectedUnit,
+                onChanged: (u) => setState(() => _selectedUnit = u),
+              ),
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  /// Estilo común para los TextField del formulario "añadir".
+  InputDecoration _whiteFieldDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: const Color(0xFF0C2D4E).withOpacity(0.4)),
+      filled: true,
+      fillColor: Colors.white,
+      counterText: '',
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: const Color(0xFF0C2D4E).withOpacity(0.15),
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: const Color(0xFF0C2D4E).withOpacity(0.15),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFF5C518), width: 2),
+      ),
     );
   }
 
@@ -395,6 +483,16 @@ class ShoppingListScreenState extends State<ShoppingListScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
+            // Emoji a la izquierda del nombre. Si no hay, mostramos un
+            // icono pequeño en gris para que la fila sea uniforme.
+            SizedBox(
+              width: 28,
+              child: item.emoji != null && item.emoji!.isNotEmpty
+                  ? Text(item.emoji!, style: const TextStyle(fontSize: 20))
+                  : const Icon(Icons.shopping_basket_outlined,
+                      color: Color(0xFF7E8A99), size: 18),
+            ),
+            const SizedBox(width: 6),
             Expanded(
               child: Text(
                 item.itemName,
@@ -447,6 +545,81 @@ class ShoppingListScreenState extends State<ShoppingListScreen> {
           const Text(
             'Añade ítems manualmente o desde una receta',
             style: TextStyle(color: Color(0xFF7E8A99), fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet con el grid de emojis sugeridos. Devuelve el emoji elegido
+/// vía `Navigator.pop`, o `""` (string vacío) si el usuario pulsa "Quitar".
+class _EmojiPickerSheet extends StatelessWidget {
+  final String? currentEmoji;
+  const _EmojiPickerSheet({this.currentEmoji});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Elige un emoji',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (currentEmoji != null && currentEmoji!.isNotEmpty)
+                TextButton.icon(
+                  onPressed: () => Navigator.pop(context, ''),
+                  icon: const Icon(Icons.close, color: Color(0xFFE57373)),
+                  label: const Text('Quitar',
+                      style: TextStyle(color: Color(0xFFE57373))),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Grid en 8 columnas con los emojis sugeridos.
+          Flexible(
+            child: GridView.builder(
+              shrinkWrap: true,
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 8,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+              ),
+              itemCount: FoodEmojis.common.length,
+              itemBuilder: (_, i) {
+                final e = FoodEmojis.common[i];
+                final selected = e == currentEmoji;
+                return GestureDetector(
+                  onTap: () => Navigator.pop(context, e),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? const Color(0xFFF5C518).withOpacity(0.3)
+                          : Colors.white.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: selected
+                          ? Border.all(
+                              color: const Color(0xFFF5C518), width: 2)
+                          : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(e, style: const TextStyle(fontSize: 22)),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import '../config/constants.dart';
 import '../models/recipe_model.dart';
 import '../services/recipe_service.dart';
 import '../widgets/recipe/recipe_card.dart';
@@ -29,6 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loading = true;
   String _username = '';
   String _email = '';
+  String _profilePicture = '';
 
   @override
   void initState() {
@@ -41,10 +45,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _loading = true);
     final username = await _storage.read(key: 'username');
     final email = await _storage.read(key: 'email');
+    final picture = await _storage.read(key: 'profilePicture');
     setState(() {
       _email = email ?? '';
       _username = username ?? (email?.split('@').first ?? 'Usuario');
+      _profilePicture = picture ?? '';
     });
+
+    // Refrescamos el perfil desde el backend para que coja cambios
+    // hechos desde otro dispositivo o si la storage local está stale.
+    _refreshUserFromBackend();
+
     try {
       // Cargamos en paralelo recetas y favoritos para que sea rápido
       final results = await Future.wait([
@@ -60,6 +71,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
+    }
+  }
+
+  // Pide al backend los datos del usuario actual y los sincroniza con
+  // storage para que el avatar/email/username se mantengan al día.
+  Future<void> _refreshUserFromBackend() async {
+    try {
+      final token = await _storage.read(key: 'token');
+      if (token == null) return;
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/users/me'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) return;
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final newUsername = data['username']?.toString() ?? _username;
+      final newEmail = data['email']?.toString() ?? _email;
+      final newPicture = data['profilePicture']?.toString() ?? '';
+      await _storage.write(key: 'username', value: newUsername);
+      await _storage.write(key: 'email', value: newEmail);
+      await _storage.write(key: 'profilePicture', value: newPicture);
+      if (!mounted) return;
+      setState(() {
+        _username = newUsername;
+        _email = newEmail;
+        _profilePicture = newPicture;
+      });
+    } catch (_) {
+      // Silencioso: si falla, usamos lo que ya tenemos en storage local.
     }
   }
 
@@ -150,17 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 40,
-            backgroundColor: const Color(0xFFF5C518),
-            child: Text(
-              _initials(_username),
-              style: const TextStyle(
-                  color: Color(0xFF0C2D4E),
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold),
-            ),
-          ),
+          _buildAvatar(),
           const SizedBox(height: 12),
           Text(
             _username,
@@ -175,6 +205,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: const TextStyle(color: Colors.white60, fontSize: 13),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Avatar circular: imagen si hay URL, iniciales sobre amarillo si no.
+  Widget _buildAvatar() {
+    if (_profilePicture.isEmpty) {
+      return CircleAvatar(
+        radius: 40,
+        backgroundColor: const Color(0xFFF5C518),
+        child: Text(
+          _initials(_username),
+          style: const TextStyle(
+              color: Color(0xFF0C2D4E),
+              fontSize: 28,
+              fontWeight: FontWeight.bold),
+        ),
+      );
+    }
+    return ClipOval(
+      child: Image.network(
+        _profilePicture,
+        width: 80,
+        height: 80,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => CircleAvatar(
+          radius: 40,
+          backgroundColor: const Color(0xFFF5C518),
+          child: Text(
+            _initials(_username),
+            style: const TextStyle(
+                color: Color(0xFF0C2D4E),
+                fontSize: 28,
+                fontWeight: FontWeight.bold),
+          ),
+        ),
       ),
     );
   }
@@ -310,6 +376,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (_) => EditProfileScreen(
           currentUsername: _username,
           currentEmail: _email,
+          currentProfilePicture:
+              _profilePicture.isEmpty ? null : _profilePicture,
         ),
       ),
     );

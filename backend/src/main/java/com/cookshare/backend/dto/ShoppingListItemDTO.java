@@ -32,6 +32,9 @@ public class ShoppingListItemDTO {
     /** Indica si el ítem ya ha sido comprado. */
     private Boolean isChecked;
 
+    /** Emoji asociado al producto (1-4 chars). Nullable. */
+    private String emoji;
+
     /** Fecha y hora en que se añadió el ítem. */
     private LocalDateTime createdAt;
 }

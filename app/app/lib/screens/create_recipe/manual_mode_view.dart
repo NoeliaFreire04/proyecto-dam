@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/recipe_model.dart';
+import '../../models/unit.dart';
 import '../../services/recipe_service.dart';
 import '../../widgets/recipe/ingredient_form_row.dart';
 import '../../widgets/recipe/recipe_text_field.dart';
 import '../../widgets/recipe/visibility_selector.dart';
 import '../recipe_detail_screen.dart';
 
-/// Vista del modo "Formulario manual" para crear receta.
-/// Valida campos obligatorios y construye el payload para el backend.
+/// Vista del modo "Formulario manual" para crear o editar una receta.
+/// Si se pasa [initialRecipe], el formulario se rellena con sus datos y
+/// al guardar se llama al endpoint PUT en lugar de POST.
 class ManualModeView extends StatefulWidget {
-  const ManualModeView({super.key});
+  final Recipe? initialRecipe;
+
+  const ManualModeView({super.key, this.initialRecipe});
 
   @override
   State<ManualModeView> createState() => _ManualModeViewState();
@@ -24,24 +28,67 @@ class _ManualModeViewState extends State<ManualModeView> {
   final _titleCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
   final _instructionsCtrl = TextEditingController();
+  final _imageUrlCtrl = TextEditingController();
   final _servingsCtrl = TextEditingController(text: '4');
   final _timeCtrl = TextEditingController(text: '30 min');
 
   bool _isPublic = true;
   bool _saving = false;
+  String _category = 'OTRA';
 
-  // Cada ingrediente tiene dos controladores (nombre y cantidad).
+  // Cada ingrediente tiene nombre + cantidad numérica + unidad (enum).
   final List<_IngredientControllers> _ingredients = [
-    _IngredientControllers(name: 'Espaguetis', quantity: '200 g'),
-    _IngredientControllers(name: 'Huevos', quantity: '2 uds'),
+    _IngredientControllers(name: 'Espaguetis', quantity: '200', unit: Unit.g),
+    _IngredientControllers(name: 'Huevos', quantity: '2', unit: Unit.uds),
     _IngredientControllers(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _imageUrlCtrl.addListener(() => setState(() {}));
+
+    // Modo edición: rellenar todos los campos con los datos de la receta.
+    final r = widget.initialRecipe;
+    if (r != null) {
+      _titleCtrl.text = r.title;
+      _descriptionCtrl.text = r.description ?? '';
+      _instructionsCtrl.text = r.instructions ?? '';
+      _imageUrlCtrl.text = r.imageUrl ?? '';
+      _servingsCtrl.text = '${r.servingsBase}';
+      _timeCtrl.text = '';
+      _isPublic = r.isPublic;
+      _category = r.category;
+
+      if (r.recipeIngredients.isNotEmpty) {
+        for (final c in _ingredients) c.dispose();
+        _ingredients
+          ..clear()
+          ..addAll(r.recipeIngredients.map((ing) => _IngredientControllers(
+                name: ing.ingredientName,
+                quantity: ing.quantity != null
+                    ? _fmtQty(ing.quantity!)
+                    : '',
+                unit: Unit.fromCode(ing.unit),
+              )));
+      }
+    }
+  }
+
+  /// Formatea la cantidad numérica suprimiendo decimales .0 innecesarios.
+  static String _fmtQty(double qty) {
+    if (qty == qty.roundToDouble()) return qty.toInt().toString();
+    return qty.toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+  }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
     _descriptionCtrl.dispose();
     _instructionsCtrl.dispose();
+    _imageUrlCtrl.dispose();
     _servingsCtrl.dispose();
     _timeCtrl.dispose();
     for (final i in _ingredients) {
@@ -61,25 +108,6 @@ class _ManualModeViewState extends State<ManualModeView> {
     });
   }
 
-  /// Convierte el texto "200 g" → {quantity: 200, unit: "g"}.
-  /// Si no se puede parsear, deja la cantidad como null.
-  Map<String, dynamic> _parseQuantity(String text) {
-    final clean = text.trim();
-    if (clean.isEmpty) return {'quantity': null, 'unit': null};
-
-    final match = RegExp(r'^([\d.,]+)\s*(.*)$').firstMatch(clean);
-    if (match == null) {
-      return {'quantity': null, 'unit': clean};
-    }
-    final raw = match.group(1)!.replaceAll(',', '.');
-    final qty = double.tryParse(raw);
-    final unit = match.group(2)?.trim();
-    return {
-      'quantity': qty,
-      'unit': (unit == null || unit.isEmpty) ? null : unit,
-    };
-  }
-
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -87,11 +115,14 @@ class _ManualModeViewState extends State<ManualModeView> {
     for (final i in _ingredients) {
       final name = i.nameController.text.trim();
       if (name.isEmpty) continue;
-      final parsed = _parseQuantity(i.quantityController.text);
+      // La cantidad es numérica directa. Si está vacía, default 1.
+      // La unidad ya es un enum, no hay que parsear nada.
+      final qtyRaw = i.quantityController.text.trim().replaceAll(',', '.');
+      final qty = double.tryParse(qtyRaw);
       ingredients.add({
         'ingredientName': name,
-        'quantity': parsed['quantity'],
-        'unit': parsed['unit'],
+        'quantity': (qty == null || qty <= 0) ? 1 : qty,
+        'unit': i.unit.code,
       });
     }
 
@@ -117,42 +148,59 @@ class _ManualModeViewState extends State<ManualModeView> {
       final fullDescription = time.isEmpty
           ? description
           : (description.isEmpty ? 'Tiempo: $time' : '$description\n\nTiempo: $time');
+      final imageUrl = _imageUrlCtrl.text.trim();
 
-      final Recipe created = await _service.createRecipe(
-        title: _titleCtrl.text.trim(),
-        description: fullDescription.isEmpty ? null : fullDescription,
-        instructions: _instructionsCtrl.text.trim().isEmpty
-            ? null
-            : _instructionsCtrl.text.trim(),
-        servingsBase: servings,
-        isPublic: _isPublic,
-        ingredients: ingredients,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Receta creada')),
-      );
-
-      // Reseteamos el formulario antes de navegar al detalle, para que
-      // si el usuario vuelve atrás encuentre el formulario vacío y no
-      // los datos de la receta que ya creó.
-      _resetForm();
-
-      // Usamos push (no pushReplacement) porque esta vista vive dentro
-      // del tab "Crear" del IndexedStack del HomeScreen. Si hicieramos
-      // pushReplacement, reemplazaríamos el HomeScreen entero y al hacer
-      // back se quedaría la app en blanco.
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => RecipeDetailScreen(recipe: created),
-        ),
-      );
+      if (widget.initialRecipe != null) {
+        // ── MODO EDICIÓN ──
+        final Recipe updated = await _service.updateRecipe(
+          id: widget.initialRecipe!.id,
+          title: _titleCtrl.text.trim(),
+          description: fullDescription.isEmpty ? null : fullDescription,
+          instructions: _instructionsCtrl.text.trim().isEmpty
+              ? null
+              : _instructionsCtrl.text.trim(),
+          servingsBase: servings,
+          isPublic: _isPublic,
+          imageUrl: imageUrl.isEmpty ? null : imageUrl,
+          category: _category,
+          ingredients: ingredients,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Receta actualizada')),
+        );
+        Navigator.pop(context, updated);
+      } else {
+        // ── MODO CREACIÓN ──
+        final Recipe created = await _service.createRecipe(
+          title: _titleCtrl.text.trim(),
+          description: fullDescription.isEmpty ? null : fullDescription,
+          instructions: _instructionsCtrl.text.trim().isEmpty
+              ? null
+              : _instructionsCtrl.text.trim(),
+          servingsBase: servings,
+          isPublic: _isPublic,
+          imageUrl: imageUrl.isEmpty ? null : imageUrl,
+          category: _category,
+          ingredients: ingredients,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Receta creada')),
+        );
+        _resetForm();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RecipeDetailScreen(recipe: created),
+          ),
+        );
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo guardar la receta')),
+        const SnackBar(
+            content: Text('No se pudo guardar la receta')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -165,10 +213,12 @@ class _ManualModeViewState extends State<ManualModeView> {
     _titleCtrl.clear();
     _descriptionCtrl.clear();
     _instructionsCtrl.clear();
+    _imageUrlCtrl.clear();
     _servingsCtrl.text = '4';
     _timeCtrl.text = '30 min';
     setState(() {
       _isPublic = true;
+      _category = 'OTRA';
       for (final i in _ingredients) {
         i.dispose();
       }
@@ -208,6 +258,17 @@ class _ManualModeViewState extends State<ManualModeView> {
             maxLines: 3,
             maxLength: 500,
           ),
+          const SizedBox(height: 14),
+          RecipeTextField(
+            controller: _imageUrlCtrl,
+            labelOnTop: 'IMAGEN (URL)',
+            hint: 'https://... (opcional)',
+            maxLength: 500,
+          ),
+          if (_imageUrlCtrl.text.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildImagePreview(),
+          ],
           const SizedBox(height: 14),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,6 +318,18 @@ class _ManualModeViewState extends State<ManualModeView> {
             onChanged: (v) => setState(() => _isPublic = v),
           ),
           const SizedBox(height: 14),
+          const Text(
+            'CATEGORÍA',
+            style: TextStyle(
+              color: Color(0xFF0C2D4E),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          _buildCategoryDropdown(),
+          const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -288,7 +361,7 @@ class _ManualModeViewState extends State<ManualModeView> {
             child: Row(
               children: [
                 Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: Text(
                     'NOMBRE',
                     style: TextStyle(
@@ -298,11 +371,11 @@ class _ManualModeViewState extends State<ManualModeView> {
                         letterSpacing: 0.3),
                   ),
                 ),
-                SizedBox(width: 8),
+                SizedBox(width: 6),
                 Expanded(
                   flex: 2,
                   child: Text(
-                    'CANT. / UD.',
+                    'CANT.',
                     style: TextStyle(
                         color: Color(0xFF7E8A99),
                         fontSize: 10,
@@ -310,7 +383,19 @@ class _ManualModeViewState extends State<ManualModeView> {
                         letterSpacing: 0.3),
                   ),
                 ),
-                SizedBox(width: 48),
+                SizedBox(width: 6),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    'UNIDAD',
+                    style: TextStyle(
+                        color: Color(0xFF7E8A99),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3),
+                  ),
+                ),
+                SizedBox(width: 32),
               ],
             ),
           ),
@@ -321,11 +406,21 @@ class _ManualModeViewState extends State<ManualModeView> {
               key: ValueKey(ctrls.id),
               nameController: ctrls.nameController,
               quantityController: ctrls.quantityController,
+              unit: ctrls.unit,
+              onUnitChanged: (u) => setState(() => ctrls.unit = u),
               canRemove: _ingredients.length > 1,
               onRemove: () => _removeIngredient(i),
             );
           }),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
+          RecipeTextField(
+            controller: _instructionsCtrl,
+            labelOnTop: 'PASOS',
+            hint: '1. Pica la cebolla...\n2. Sofríe en la sartén...\n3. ...',
+            maxLines: 8,
+            maxLength: 5000,
+          ),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -351,24 +446,82 @@ class _ManualModeViewState extends State<ManualModeView> {
                         color: Colors.white,
                       ),
                     )
-                  : const Text('Guardar receta'),
+                  : Text(widget.initialRecipe != null
+                      ? 'Actualizar receta'
+                      : 'Guardar receta'),
             ),
           ),
         ],
       ),
     );
   }
+
+  /// Previsualización de la imagen URL si está rellena.
+  Widget _buildImagePreview() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.network(
+        _imageUrlCtrl.text.trim(),
+        height: 140,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          height: 140,
+          color: const Color(0xFFE8E0D2),
+          alignment: Alignment.center,
+          child: const Text(
+            'URL de imagen inválida',
+            style: TextStyle(color: Color(0xFF0C2D4E)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Dropdown con todas las categorías predefinidas del enum backend.
+  Widget _buildCategoryDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F0E8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: const Color(0xFF0C2D4E).withOpacity(0.15),
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _category,
+          isExpanded: true,
+          icon: const Icon(Icons.expand_more, color: Color(0xFF0C2D4E)),
+          style: const TextStyle(color: Color(0xFF0C2D4E), fontSize: 15),
+          dropdownColor: const Color(0xFFF5F0E8),
+          onChanged: (v) {
+            if (v != null) setState(() => _category = v);
+          },
+          items: RecipeCategories.values.entries
+              .map((e) => DropdownMenuItem(
+                    value: e.key,
+                    child: Text(e.value),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+  }
 }
 
-/// Pareja de controladores para una fila de ingrediente.
+/// Estado de una fila de ingrediente: nombre + cantidad + unidad seleccionada.
 class _IngredientControllers {
   final String id = UniqueKey().toString();
   final TextEditingController nameController;
   final TextEditingController quantityController;
+  Unit unit;
 
-  _IngredientControllers({String? name, String? quantity})
+  _IngredientControllers({String? name, String? quantity, Unit? unit})
       : nameController = TextEditingController(text: name ?? ''),
-        quantityController = TextEditingController(text: quantity ?? '');
+        quantityController = TextEditingController(text: quantity ?? ''),
+        unit = unit ?? Unit.uds;
 
   void dispose() {
     nameController.dispose();

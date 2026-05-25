@@ -2,6 +2,7 @@ package com.cookshare.backend.service;
 
 import com.cookshare.backend.dto.RecipeDTO;
 import com.cookshare.backend.dto.RecipeIngredientDTO;
+import com.cookshare.backend.entity.Category;
 import com.cookshare.backend.entity.Ingredient;
 import com.cookshare.backend.entity.Recipe;
 import com.cookshare.backend.entity.RecipeIngredient;
@@ -10,6 +11,7 @@ import com.cookshare.backend.repository.IngredientRepository;
 import com.cookshare.backend.repository.RecipeIngredientRepository;
 import com.cookshare.backend.repository.RecipeRepository;
 import com.cookshare.backend.repository.UserRepository;
+import com.cookshare.backend.util.UnitNormalizer;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -51,7 +53,11 @@ public class RecipeService {
     /**
      * Crea una receta nueva y la asocia al usuario autenticado.
      * Para cada ingrediente del DTO, lo busca en el catálogo o lo crea si no existe.
+     *
+     * @Transactional para que si falla un ingrediente a mitad, se haga rollback
+     * y no quede una receta a medias en BD.
      */
+    @Transactional
     public RecipeDTO create(RecipeDTO dto, String email){
         // Buscar el usuario por email
         Optional<User> userOpt = userRepository.findByEmail(email);
@@ -63,12 +69,35 @@ public class RecipeService {
         User user = userOpt.get();
 
         // Construir y guardar la receta
-        Recipe recipe = Recipe.builder().user(user).description(dto.getDescription()).title(dto.getTitle()).imageUrl(dto.getImageUrl()).instructions(dto.getInstructions()).servingsBase(dto.getServingsBase()).isPublic(dto.getIsPublic()).build();
+        Recipe recipe = Recipe.builder()
+                .user(user)
+                .description(dto.getDescription())
+                .title(dto.getTitle())
+                .imageUrl(dto.getImageUrl())
+                .instructions(dto.getInstructions())
+                .servingsBase(dto.getServingsBase())
+                .isPublic(dto.getIsPublic())
+                .category(parseCategory(dto.getCategory()))
+                .build();
         Recipe recipeSave = recipeRepository.save(recipe);
+
+        // Vamos a construir la lista de DTOs a la vez que guardamos, así
+        // no tenemos que recargar la receta de BD (que puede no ver los
+        // ingredientes aún dentro de la misma transacción).
+        List<RecipeIngredientDTO> savedDtos = new ArrayList<>();
 
         // Procesar los ingredientes si vienen en el DTO
         if (dto.getRecipeIngredients() != null){
+            // Catalogo de ingredientes ya añadidos en ESTA receta, para
+            // evitar duplicados (la tabla recipe_ingredient tiene
+            // UNIQUE (recipe_id, ingredient_id)).
+            java.util.Set<Long> alreadyAddedIngredientIds = new java.util.HashSet<>();
+
             for (RecipeIngredientDTO ingredientDto : dto.getRecipeIngredients()){
+                if (ingredientDto.getIngredientName() == null
+                        || ingredientDto.getIngredientName().isBlank()) {
+                    continue;
+                }
                 // Normalizar el nombre a minúsculas y sin espacios extra
                 String nombre = ingredientDto.getIngredientName().trim().toLowerCase();
 
@@ -82,34 +111,81 @@ public class RecipeService {
                     ingredient = ingredientOpt.get();
                 }
 
+                // Si ya añadimos este ingrediente en esta receta, skip
+                // (evitamos violar la UniqueConstraint).
+                if (!alreadyAddedIngredientIds.add(ingredient.getId())) {
+                    continue;
+                }
+
+                // Defaults seguros para evitar fallo por @NotNull/@Positive
                 BigDecimal quantity = ingredientDto.getQuantity();
+                if (quantity == null || quantity.signum() <= 0) {
+                    quantity = BigDecimal.ONE;
+                }
                 String unit = ingredientDto.getUnit();
+                if (unit == null || unit.isBlank()) {
+                    unit = "uds";
+                }
+                // Normaliza variantes a códigos canónicos del enum Unit
+                // del frontend (ej: "gramos" → "g", "kilo" → "kg").
+                unit = UnitNormalizer.normalize(unit);
 
                 // Crear la relación receta-ingrediente
                 RecipeIngredient ri = RecipeIngredient.builder().recipe(recipeSave).ingredient(ingredient).quantity(quantity).unit(unit).build();
 
                 recipeIngredientRepository.save(ri);
+
+                // Lo añadimos al DTO de respuesta directamente
+                savedDtos.add(RecipeIngredientDTO.builder()
+                        .ingredientName(ingredient.getName())
+                        .quantity(quantity)
+                        .unit(unit)
+                        .build());
             }
         }
 
-        // Recargar la receta desde BD para que la lista de ingredientes esté
-        // poblada antes de convertirla a DTO. Si no, sale vacía porque JPA
-        // no actualiza automáticamente la colección One-to-Many tras los saves.
-        Recipe persisted = recipeRepository.findById(recipeSave.getId()).orElse(recipeSave);
-        return toDTO(persisted);
+        // Construimos el DTO de respuesta directamente con los datos en
+        // memoria, sin depender de recargar la receta de BD.
+        return RecipeDTO.builder()
+                .id(recipeSave.getId())
+                .title(recipeSave.getTitle())
+                .description(recipeSave.getDescription())
+                .instructions(recipeSave.getInstructions())
+                .servingsBase(recipeSave.getServingsBase())
+                .isPublic(recipeSave.getIsPublic())
+                .imageUrl(recipeSave.getImageUrl())
+                .category(recipeSave.getCategory() != null ? recipeSave.getCategory().name() : Category.OTRA.name())
+                .authorUsername(user.getUsername())
+                .createdAt(recipeSave.getCreatedAt())
+                .recipeIngredients(savedDtos)
+                .build();
+    }
+
+    /**
+     * Convierte un nombre de categoría (case-insensitive) al enum.
+     * Si el valor es nulo o no coincide, devuelve OTRA por defecto.
+     */
+    private Category parseCategory(String value) {
+        if (value == null || value.isBlank()) return Category.OTRA;
+        try {
+            return Category.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return Category.OTRA;
+        }
     }
 
     /**
      * Convierte una entidad Recipe a DTO para no exponer entidades JPA en las respuestas.
      */
     public RecipeDTO toDTO(Recipe recipe){
-        // Mapear cada RecipeIngredient a su DTO
+        // Mapear cada RecipeIngredient a su DTO, normalizando la unidad
+        // por si en BD hay variantes antiguas ("gramos" → "g").
         List<RecipeIngredientDTO> ingredientDTOs = new ArrayList<>();
         for (RecipeIngredient ri : recipe.getRecipeIngredients()) {
             RecipeIngredientDTO ingDTO = RecipeIngredientDTO.builder()
                     .ingredientName(ri.getIngredient().getName())
                     .quantity(ri.getQuantity())
-                    .unit(ri.getUnit())
+                    .unit(UnitNormalizer.normalize(ri.getUnit()))
                     .build();
             ingredientDTOs.add(ingDTO);
         }
@@ -124,6 +200,7 @@ public class RecipeService {
                 .servingsBase(recipe.getServingsBase())
                 .instructions(recipe.getInstructions())
                 .imageUrl(recipe.getImageUrl())
+                .category(recipe.getCategory() != null ? recipe.getCategory().name() : Category.OTRA.name())
                 .createdAt(recipe.getCreatedAt())
                 .build();
     }
@@ -197,15 +274,15 @@ public class RecipeService {
      * Usa @Transactional porque hace dos borrados: si falla uno, se deshace el otro.
      */
     @Transactional
-    public void delete(Long recipeId, String username) {
+    public void delete(Long recipeId, String email) {
         Optional<Recipe> optional = recipeRepository.findById(recipeId);
         if (optional.isEmpty()) {
             throw new RuntimeException("Receta no encontrada");
         }
         Recipe recipe = optional.get();
 
-        // Verificar que el usuario sea el autor
-        if (!recipe.getUser().getUsername().equals(username)) {
+        // Verificar que el usuario sea el autor (el JWT trae el email)
+        if (!recipe.getUser().getEmail().equals(email)) {
             throw new RuntimeException("No tienes permiso para eliminar esta receta");
         }
 
@@ -217,15 +294,15 @@ public class RecipeService {
     /**
      * Busca una receta por ID. Si es privada, solo el autor puede verla.
      */
-    public RecipeDTO findById(Long recipeId, String username) {
+    public RecipeDTO findById(Long recipeId, String email) {
         Optional<Recipe> optional = recipeRepository.findById(recipeId);
         if (optional.isEmpty()) {
             throw new RuntimeException("Receta no encontrada");
         }
         Recipe recipe = optional.get();
 
-        // Las recetas privadas solo son visibles para su autor
-        if (!recipe.getIsPublic() && !recipe.getUser().getUsername().equals(username)) {
+        // Las recetas privadas solo son visibles para su autor (JWT trae email)
+        if (!recipe.getIsPublic() && !recipe.getUser().getEmail().equals(email)) {
             throw new RuntimeException("No tienes acceso a esta receta");
         }
         return toDTO(recipe);
@@ -233,9 +310,14 @@ public class RecipeService {
 
     /**
      * Devuelve todas las recetas de un usuario (públicas y privadas).
+     * El parámetro es el email del autenticado (subject del JWT).
      */
-    public List<RecipeDTO> findByUser(String username) {
-        List<Recipe> recipes = recipeRepository.findByUserUsername(username);
+    public List<RecipeDTO> findByUser(String email) {
+        Optional<User> userOpt = userRepository.findByEmail(email);
+        if (userOpt.isEmpty()) {
+            throw new RuntimeException("Usuario no encontrado");
+        }
+        List<Recipe> recipes = recipeRepository.findByUserUsername(userOpt.get().getUsername());
         List<RecipeDTO> dtos = new ArrayList<>();
         for (Recipe recipe : recipes) {
             dtos.add(toDTO(recipe));
@@ -245,10 +327,23 @@ public class RecipeService {
 
     /**
      * Feed público: devuelve recetas públicas paginadas, ordenadas por fecha de creación.
+     * Si se pasa una categoría válida, filtra solo recetas de esa categoría.
      */
-    public Page<RecipeDTO> findPublic(int page, int size) {
+    public Page<RecipeDTO> findPublic(int page, int size, String categoryParam) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Recipe> recipes = recipeRepository.findByIsPublicTrue(pageable);
+        Page<Recipe> recipes;
+        if (categoryParam != null && !categoryParam.isBlank()
+                && !"TODAS".equalsIgnoreCase(categoryParam)) {
+            try {
+                Category cat = Category.valueOf(categoryParam.trim().toUpperCase());
+                recipes = recipeRepository.findByIsPublicTrueAndCategory(cat, pageable);
+            } catch (IllegalArgumentException e) {
+                // Categoría desconocida → devolvemos feed sin filtro
+                recipes = recipeRepository.findByIsPublicTrue(pageable);
+            }
+        } else {
+            recipes = recipeRepository.findByIsPublicTrue(pageable);
+        }
         return recipes.map(recipe -> toDTO(recipe));
     }
 }

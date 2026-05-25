@@ -25,9 +25,26 @@ class _FeedScreenState extends State<FeedScreen> {
   int _page = 0;
   bool _hasMore = true;
 
-  String _selectedCategory = 'Todas';
+  // Códigos del enum backend. 'TODAS' es ficticio = sin filtro.
+  // Mostramos solo las categorías más comunes como chips para no saturar.
+  String _selectedCategory = 'TODAS';
   String _searchQuery = '';
-  final List<String> _categories = ['Todas', 'Italiana', 'Vegana', 'Fría'];
+  final List<MapEntry<String, String>> _categoryChips = const [
+    MapEntry('TODAS', 'Todas'),
+    MapEntry('ITALIANA', 'Italiana'),
+    MapEntry('VEGANA', 'Vegana'),
+    MapEntry('FRIA', 'Fría'),
+    MapEntry('POSTRE', 'Postre'),
+    MapEntry('CARNE', 'Carne'),
+    MapEntry('PESCADO', 'Pescado'),
+    MapEntry('PASTA', 'Pasta'),
+    MapEntry('ASIATICA', 'Asiática'),
+    MapEntry('MEXICANA', 'Mexicana'),
+    MapEntry('MEDITERRANEA', 'Mediterránea'),
+    MapEntry('VEGETARIANA', 'Vegetariana'),
+    MapEntry('SOPA', 'Sopa'),
+    MapEntry('TRADICIONAL', 'Tradicional'),
+  ];
 
   String _username = '';
 
@@ -64,7 +81,12 @@ class _FeedScreenState extends State<FeedScreen> {
       });
     }
     try {
-      final recipes = await _service.getFeed(page: _page, size: 10);
+      // Pedimos al backend solo las recetas de la categoría seleccionada.
+      final recipes = await _service.getFeed(
+        page: _page,
+        size: 10,
+        category: _selectedCategory,
+      );
       setState(() {
         _recipes.addAll(recipes);
         _loading = false;
@@ -77,6 +99,13 @@ class _FeedScreenState extends State<FeedScreen> {
         _loadingMore = false;
       });
     }
+  }
+
+  // Cuando el usuario toca un chip, recargamos el feed con el nuevo filtro.
+  void _onCategoryTap(String code) {
+    if (code == _selectedCategory) return;
+    setState(() => _selectedCategory = code);
+    _loadFeed(reset: true);
   }
 
   void _onScroll() {
@@ -92,22 +121,16 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
+  // El filtro por categoría lo hace el backend. Aquí solo aplicamos la
+  // búsqueda de texto local (título, descripción, ingredientes).
   List<Recipe> get _filteredRecipes {
-    Iterable<Recipe> result = _recipes;
-    if (_selectedCategory != 'Todas') {
-      final cat = _selectedCategory.toLowerCase();
-      result = result.where((r) =>
-          (r.title + (r.description ?? '')).toLowerCase().contains(cat));
-    }
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
-      result = result.where((r) =>
-          r.title.toLowerCase().contains(q) ||
-          (r.description ?? '').toLowerCase().contains(q) ||
-          r.recipeIngredients
-              .any((i) => i.ingredientName.toLowerCase().contains(q)));
-    }
-    return result.toList();
+    if (_searchQuery.isEmpty) return _recipes;
+    final q = _searchQuery.toLowerCase();
+    return _recipes.where((r) =>
+        r.title.toLowerCase().contains(q) ||
+        (r.description ?? '').toLowerCase().contains(q) ||
+        r.recipeIngredients
+            .any((i) => i.ingredientName.toLowerCase().contains(q))).toList();
   }
 
   String _greeting() {
@@ -177,13 +200,21 @@ class _FeedScreenState extends State<FeedScreen> {
                         if (index < filtered.length) {
                           return RecipeCard(
                             recipe: filtered[index],
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => RecipeDetailScreen(
-                                    recipe: filtered[index]),
-                              ),
-                            ),
+                            onTap: () async {
+                              // Esperamos el resultado del detalle; si la
+                              // receta fue eliminada (pop(true)) recargamos
+                              // para que desaparezca del feed.
+                              final result = await Navigator.push<bool>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => RecipeDetailScreen(
+                                      recipe: filtered[index]),
+                                ),
+                              );
+                              if (result == true) {
+                                _loadFeed(reset: true);
+                              }
+                            },
                           );
                         }
                         return null;
@@ -282,13 +313,15 @@ class _FeedScreenState extends State<FeedScreen> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _categories.length,
+            itemCount: _categoryChips.length,
             separatorBuilder: (context, index) => const SizedBox(width: 8),
             itemBuilder: (_, i) {
-              final cat = _categories[i];
-              final selected = cat == _selectedCategory;
+              final entry = _categoryChips[i];
+              final code = entry.key;
+              final label = entry.value;
+              final selected = code == _selectedCategory;
               return GestureDetector(
-                onTap: () => setState(() => _selectedCategory = cat),
+                onTap: () => _onCategoryTap(code),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(
@@ -305,11 +338,9 @@ class _FeedScreenState extends State<FeedScreen> {
                     ),
                   ),
                   child: Text(
-                    cat,
-                    style: TextStyle(
-                      color: selected
-                          ? const Color(0xFF0C2D4E)
-                          : const Color(0xFF0C2D4E),
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFF0C2D4E),
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),

@@ -9,10 +9,12 @@ class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
 
   @override
-  State<FavoritesScreen> createState() => _FavoritesScreenState();
+  State<FavoritesScreen> createState() => FavoritesScreenState();
 }
 
-class _FavoritesScreenState extends State<FavoritesScreen> {
+// Estado público para que HomeScreen pueda forzar una recarga via GlobalKey
+// cuando el usuario cambia a este tab.
+class FavoritesScreenState extends State<FavoritesScreen> {
   final RecipeService _service = RecipeService();
   //lista de recetas favoritas del usuario
   List<Recipe> _favorites = [];
@@ -23,6 +25,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     super.initState();
     _loadFavorites();
   }
+
+  // Permite a HomeScreen forzar una recarga cuando se selecciona el tab.
+  void reload() => _loadFavorites();
 
   //carga los favoritos desde la API
   Future<void> _loadFavorites() async {
@@ -63,48 +68,55 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _loadFavorites,
-          ),
-        ],
       ),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF0C2D4E)))
-          : _favorites.isEmpty
-              ? _buildEmpty()
-              : RefreshIndicator(
-                  color: const Color(0xFFF5C518),
-                  onRefresh: _loadFavorites,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: _favorites.length,
-                    itemBuilder: (_, i) {
-                      final recipe = _favorites[i];
-                      return RecipeCard(
-                        recipe: recipe,
-                        onTap: () async {
-                          //al volver del detalle recarga los favoritos por si se quitó alguno
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  RecipeDetailScreen(recipe: recipe),
-                            ),
-                          );
-                          _loadFavorites();
-                        },
-                        trailing: IconButton(
-                          icon: const Icon(Icons.favorite,
-                              color: Color(0xFFF5C518)),
-                          onPressed: () => _removeFavorite(recipe),
+          // El RefreshIndicator envuelve siempre, incluso si está vacía,
+          // para que el pull-to-refresh funcione desde cualquier estado.
+          : RefreshIndicator(
+              color: const Color(0xFFF5C518),
+              onRefresh: _loadFavorites,
+              child: _favorites.isEmpty
+                  ? ListView(
+                      // Hay que dejar physics always-scrollable para que
+                      // el pull-to-refresh funcione aunque no haya items.
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.7,
+                          child: _buildEmpty(),
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: _favorites.length,
+                      itemBuilder: (_, i) {
+                        final recipe = _favorites[i];
+                        return RecipeCard(
+                          recipe: recipe,
+                          onTap: () async {
+                            //al volver del detalle recarga los favoritos por si se quitó alguno
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    RecipeDetailScreen(recipe: recipe),
+                              ),
+                            );
+                            _loadFavorites();
+                          },
+                          trailing: IconButton(
+                            icon: const Icon(Icons.favorite,
+                                color: Color(0xFFF5C518)),
+                            onPressed: () => _removeFavorite(recipe),
+                          ),
+                        );
+                      },
+                    ),
+            ),
     );
   }
 

@@ -25,9 +25,12 @@ class InventoryItem {
   }
 
   //devuelve "200 g", "2 uds" o cadena vacía si no hay cantidad ni unidad
+  //Para unidades cualitativas ("pizca", "al gusto") solo muestra la unidad.
   String get displayQuantity {
-    final q = quantity;
     final u = unit ?? '';
+    const qualitative = {'pizca', 'al gusto'};
+    if (qualitative.contains(u.toLowerCase())) return u;
+    final q = quantity;
     if (q == null) return u;
     final clean = q == q.roundToDouble()
         ? q.toInt().toString()
