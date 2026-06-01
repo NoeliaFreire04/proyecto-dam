@@ -15,7 +15,6 @@ Vagrant.configure("2") do |config|
 
   # ── Recursos VirtualBox ──────────────────────────────────────────────────────
   config.vm.provider "virtualbox" do |vb|
-    vb.name   = "cookshare-vm"
     vb.memory = 4096   # Flutter build necesita memoria; 4 GB es cómodo
     vb.cpus   = 2
     vb.gui    = true   # Mostrar ventana VirtualBox para ver el arranque

@@ -5,6 +5,6 @@ class AppConstants {
   // En desarrollo usa la IP local por defecto.
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: 'http://192.168.56.1:8080/api',
+    defaultValue: 'https://proyecto-dam-8bls.onrender.com/api',
   );
 }

@@ -21,7 +21,7 @@ class RecipeCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF0C2D4E),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF7A8FA3).withOpacity(0.3)),
+          border: Border.all(color: const Color(0xFF7A8FA3).withValues(alpha: 0.3)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -60,10 +60,10 @@ class RecipeCard extends StatelessWidget {
                 ),
               ),
               //descripción corta si la receta la tiene
-              if (recipe.description.isNotEmpty) ...[
+              if ((recipe.description ?? '').isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
-                  recipe.description,
+                  recipe.description!,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -83,7 +83,7 @@ class RecipeCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '${recipe.ingredients.length} ingredientes',
+                    '${recipe.recipeIngredients.length} ingredientes',
                     style: const TextStyle(
                       color: Color(0xFF7A8FA3),
                       fontSize: 12,

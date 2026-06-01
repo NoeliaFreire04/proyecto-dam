@@ -80,14 +80,16 @@ class _IngredientListState extends State<IngredientList> {
         const SizedBox(height: 12),
         //fila por cada ingrediente con su cantidad ajustada
         ...widget.ingredients.map((i) {
-          final qty = _format(_scaled(i.quantity));
+          final qtyStr = i.quantity != null ? _format(_scaled(i.quantity!)) : '';
+          final unitStr = i.unit ?? '';
+          final amount = [qtyStr, unitStr].where((s) => s.isNotEmpty).join(' ');
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    i.name,
+                    i.ingredientName,
                     style: const TextStyle(
                       color: Color(0xFFF5F0E8),
                       fontSize: 14,
@@ -95,7 +97,7 @@ class _IngredientListState extends State<IngredientList> {
                   ),
                 ),
                 Text(
-                  '$qty ${i.unit}',
+                  amount,
                   style: const TextStyle(
                     color: Color(0xFF7A8FA3),
                     fontSize: 14,
@@ -128,7 +130,7 @@ class _StepButton extends StatelessWidget {
           shape: BoxShape.circle,
           color: onTap != null
               ? const Color(0xFFE8C55A)
-              : const Color(0xFF7A8FA3).withOpacity(0.3),
+              : const Color(0xFF7A8FA3).withValues(alpha: 0.3),
         ),
         child: Icon(
           icon,

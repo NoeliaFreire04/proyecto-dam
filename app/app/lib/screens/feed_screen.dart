@@ -10,10 +10,10 @@ class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key, this.onNavigateToProfile});
 
   @override
-  State<FeedScreen> createState() => _FeedScreenState();
+  State<FeedScreen> createState() => FeedScreenState();
 }
 
-class _FeedScreenState extends State<FeedScreen> {
+class FeedScreenState extends State<FeedScreen> {
   final RecipeService _service = RecipeService();
   final _storage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
@@ -70,6 +70,8 @@ class _FeedScreenState extends State<FeedScreen> {
       _username = username ?? (email?.split('@').first ?? 'Usuario');
     });
   }
+
+  void reload() => _loadFeed(reset: true);
 
   Future<void> _loadFeed({bool reset = false}) async {
     if (reset) {

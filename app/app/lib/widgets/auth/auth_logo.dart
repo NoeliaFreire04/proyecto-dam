@@ -10,7 +10,7 @@ class AuthLogo extends StatelessWidget {
       children: [
         //imagen del logo cargada desde assets
         Image.asset(
-          'assets/images/logo.png',
+          'assets/images/app_icon.png',
           height: 100,
         ),
         const SizedBox(height: 12),
